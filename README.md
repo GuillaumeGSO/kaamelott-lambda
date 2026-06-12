@@ -1,6 +1,6 @@
 # Kaamelott Lambda
 
-Serverless REST API returning random quotes from the French comedy series [Kaamelott](https://fr.wikipedia.org/wiki/Kaamelott). Built with AWS CDK (TypeScript), Lambda (Node.js 24.x), API Gateway, DynamoDB, and S3.
+Serverless REST API returning random quotes from the French comedy series [Kaamelott](https://fr.wikipedia.org/wiki/Kaamelott). Built with AWS CDK (TypeScript), Lambda (Node.js 18.x), API Gateway, DynamoDB, and S3. Features user favorites functionality with like counts and personalized quote retrieval.
 
 ## Architecture
 
@@ -10,32 +10,52 @@ S3 (quotes.json)
      └─► LoadQuotes Lambda (admin, one-time)
                │
                ▼
-          DynamoDB Table
-          ┌──────────────────────────────┐
-          │  PK: quoteId                 │
-          │  GSI: character-index        │
-          └──────────────────────────────┘
-               │                │
-               ▼                ▼
-   GetRandomQuote      GetQuoteByCharacter
-        Lambda               Lambda
-               │                │
-               └────────┬───────┘
-                        ▼
-                  API Gateway
+          DynamoDB Quotes Table          DynamoDB Favorites Table
+          ┌──────────────────────────┐    ┌─────────────────────────┐
+          │  PK: quoteId             │    │  PK: quoteId            │
+          │  GSI: character-index    │    │  SK: alias              │
+          └──────────────────────────┘    └─────────────────────────┘
+               │        │        │                     │
+               ▼        ▼        ▼                     ▼
+     GetRandomQuote  GetQuoteBy  GetQuoteBy    PostFavorite
+        Lambda       Character   Favorites     GetFavoriteStatus
+                     Lambda      Lambda         Lambda
+               │        │        │              │
+               └────────┼────────┼──────────────┘
+                        ▼        ▼
+                    API Gateway
+                   ┌─────────────┐
+                   │ GET /quotes │
+                   │ GET /quotes/random │
+                   │ GET /quotes/{character} │
+                   │ GET /quotes/by-favorites │
+                   │ GET /characters │
+                   │ POST /favorites │
+                   │ GET /favorites/status │
+                   └─────────────┘
 ```
 
 **Environments:** `staging` and `prod`, each with their own DynamoDB table, S3 bucket, Lambda functions, and API Gateway stage.
 
 ## API Endpoints
 
+### Core Quote Endpoints
+
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/quotes` | Random quote from any character |
+| `GET` | `/quotes/random` | Random quote(s) from any character (supports batchSize) |
 | `GET` | `/quotes/{character}` | Random quote for a specific character |
-| `GET` | `/characters` | Sorted list of all character names |
+| `GET` | `/characters` | Sorted list of all character names with quote counts |
 
-### Response format
+### Favorites Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/favorites` | Add or remove a quote from user favorites |
+| `GET` | `/favorites/status` | Check if a quote is favorited by a user |
+| `GET` | `/quotes/by-favorites` | Get random quote from user's favorites |
+
+### Quote Response Format
 
 ```json
 {
@@ -45,7 +65,8 @@ S3 (quotes.json)
   "actor": "Franck Pitiot",
   "film": null,
   "season": "Livre I",
-  "episode": "La Quête"
+  "episode": "La Quête",
+  "likes": 12
 }
 ```
 
@@ -58,6 +79,96 @@ S3 (quotes.json)
 | `film` | string \| null | Film title if from the movie |
 | `season` | string \| null | Season if from the series |
 | `episode` | string \| null | Episode title if from the series |
+| `likes` | number | Total number of users who favorited this quote |
+
+### Batch Quote Response
+
+For `/quotes/random?batchSize=N` where N > 1:
+
+```json
+{
+  "quotes": [
+    {
+      "quoteId": "7XLMZGpC",
+      "character": "Perceval",
+      "text": "C'est pas faux.",
+      "likes": 12
+    },
+    {
+      "quoteId": "8YMN9HqD",
+      "character": "Arthur",
+      "text": "C'est de la provocation !",
+      "likes": 8
+    }
+  ]
+}
+```
+
+### Characters Response Format
+
+```json
+[
+  {
+    "character": "Arthur",
+    "numberOfQuotes": 156
+  },
+  {
+    "character": "Léodagan",
+    "numberOfQuotes": 89
+  }
+]
+```
+
+### Favorites Endpoints
+
+#### POST /favorites
+
+Add or remove a quote from user favorites.
+
+**Request Body:**
+```json
+{
+  "quoteId": "7XLMZGpC",
+  "favorite": true,
+  "alias": "username"
+}
+```
+
+**Response:**
+```json
+{
+  "quoteId": "7XLMZGpC",
+  "alias": "username",
+  "totalLikes": 13
+}
+```
+
+#### GET /favorites/status
+
+Check if a quote is favorited by a user.
+
+**Query Parameters:**
+- `quoteId`: Quote identifier
+- `alias`: User identifier
+
+**Response:**
+```json
+{
+  "quoteId": "7XLMZGpC",
+  "alias": "username",
+  "liked": true
+}
+```
+
+#### GET /quotes/by-favorites
+
+Get a random quote from user's favorites.
+
+**Query Parameters:**
+- `alias`: User identifier (required)
+- `character`: Optional character filter
+
+**Response:** Standard quote object or 404 if no favorites found.
 
 ### Character names with accents
 
@@ -86,6 +197,36 @@ Bootstrap CDK for `ap-southeast-1` (one-time per AWS account):
 
 ```bash
 npx cdk bootstrap aws://YOUR_ACCOUNT_ID/ap-southeast-1
+```
+
+## Development
+
+### Testing
+
+The project includes comprehensive Jest test suites for all Lambda functions:
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+```
+
+**Test Coverage:**
+- 37 test cases across 7 test suites
+- 100% statement, function, and line coverage
+- 93.44% branch coverage
+- Comprehensive mocking of AWS SDK services
+
+### Building
+
+```bash
+# Compile TypeScript
+npm run build
 ```
 
 ## Deploy
@@ -139,13 +280,48 @@ npx cdk destroy --context env=staging
 ├── bin/kaamelott.ts              # CDK app entry point
 ├── lib/kaamelott-stack.ts        # All infrastructure (S3, DynamoDB, Lambdas, API GW)
 ├── lambdas/
-│   ├── get-random-quote/         # GET /quotes
+│   ├── get-random-quote/         # GET /quotes/random (supports batchSize)
 │   ├── get-quote-by-character/   # GET /quotes/{character}
 │   ├── get-characters/           # GET /characters
+│   ├── get-quote-by-favorites/   # GET /quotes/by-favorites
+│   ├── get-favorite-status/      # GET /favorites/status
+│   ├── post-favorite/            # POST /favorites
 │   └── load-quotes/              # Admin: load quotes.json from S3 → DynamoDB
+├── tests/                        # Jest test suites
+│   ├── get-random-quote.test.js
+│   ├── get-quote-by-character.test.js
+│   ├── get-characters.test.js
+│   ├── get-quote-by-favorites.test.js
+│   ├── get-favorite-status.test.js
+│   ├── post-favorite.test.js
+│   └── load-quotes.test.js
 ├── data/
 │   └── quotes.json               # 1 028 Kaamelott quotes (source of truth, uploaded to S3 on deploy)
+├── API_DOCUMENTATION.md          # Detailed API documentation
 ├── cdk.json
 ├── package.json
 └── tsconfig.json
 ```
+
+## Features
+
+### Core Functionality
+- **Random quotes**: Get single or multiple random quotes with optional `batchSize` parameter (default=1)
+- **Character filtering**: Get quotes from specific characters with URL encoding support
+- **Character listing**: Browse all available characters with quote counts
+- **Caching**: Lambda functions use intelligent caching for optimal performance
+
+### Favorites System
+- **User favorites**: Users can like/unlike quotes using an alias system
+- **Like counts**: All quotes show total number of likes from all users
+- **Personalized quotes**: Get random quotes from a user's favorites collection
+- **Favorite status**: Check if a specific quote is liked by a user
+- **Character filtering**: Filter favorite quotes by character
+
+### Infrastructure
+- **Multi-environment**: Separate staging and production deployments
+- **Serverless**: AWS Lambda functions with Node.js 18.x runtime
+- **NoSQL storage**: DynamoDB for quotes and favorites with GSI indexing
+- **API Gateway**: RESTful API with proper HTTP methods and status codes
+- **S3 storage**: Source data storage and CDK deployment artifacts
+- **TypeScript**: Full type safety for infrastructure code

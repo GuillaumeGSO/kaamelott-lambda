@@ -3,17 +3,41 @@
   "version": "2.0.0",
   "scripts": {
     "build": "tsc",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules\" jest",
+    "test:watch": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --watch",
+    "test:coverage": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.967.0",
+    "@aws-sdk/client-s3": "^3.967.0",
+    "@aws-sdk/lib-dynamodb": "^3.967.0",
+    "@types/jest": "^29.5.0",
     "@types/node": "~20",
     "aws-cdk": "^2.200.0",
     "aws-cdk-lib": "^2.200.0",
     "constructs": "^10.0.0",
+    "jest": "^29.5.0",
     "ts-node": "^10.9.0",
     "typescript": "~5.5.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "lambdas/**/*.mjs"
+    ],
+    "testPathIgnorePatterns": [
+      "/cdk.out/"
+    ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/cdk.out/"
+    ],
+    "transform": {}
   }
 }

@@ -5,3 +5,7 @@ node_modules/
 *.js
 *.d.ts
 cdk.context.json
+
+# Test coverage
+coverage/
+*.lcov

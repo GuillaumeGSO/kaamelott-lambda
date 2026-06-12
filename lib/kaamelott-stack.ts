@@ -55,6 +55,12 @@ export class KaamelottStack extends cdk.Stack {
       removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
 
+    favoritesTable.addGlobalSecondaryIndex({
+      indexName: 'alias-index',
+      partitionKey: { name: 'alias', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     const commonEnv = {
       TABLE_NAME: table.tableName,
       FAVORITES_TABLE_NAME: favoritesTable.tableName,
@@ -67,19 +73,19 @@ export class KaamelottStack extends cdk.Stack {
       environment: commonEnv,
     };
 
-    // Lambda: GET /quotes
+    // Lambda: GET /quotes/random
     const getRandomQuote = new lambda.Function(this, 'GetRandomQuote', {
       ...lambdaDefaults,
       functionName: `kaamelott-get-random-quote-${environment}`,
       code: lambda.Code.fromAsset('lambdas/get-random-quote'),
       handler: 'index.lambdaHandler',
       timeout: cdk.Duration.seconds(5),
-      description: 'Returns a random Kaamelott quote',
+      description: 'Returns random Kaamelott quote(s) with optional batch size',
     });
     table.grantReadData(getRandomQuote);
     favoritesTable.grantReadData(getRandomQuote);
 
-    // Lambda: GET /quotes/{character}
+    // Lambda: GET /quotes/by-character/{character}
     const getQuoteByCharacter = new lambda.Function(this, 'GetQuoteByCharacter', {
       ...lambdaDefaults,
       functionName: `kaamelott-get-quote-by-character-${environment}`,
@@ -91,7 +97,19 @@ export class KaamelottStack extends cdk.Stack {
     table.grantReadData(getQuoteByCharacter);
     favoritesTable.grantReadData(getQuoteByCharacter);
 
-    // Lambda: POST /quotes/{quoteId}/favorite
+    // Lambda: GET /quotes/by-favorites
+    const getQuoteByFavorites = new lambda.Function(this, 'GetQuoteByFavorites', {
+      ...lambdaDefaults,
+      functionName: `kaamelott-get-quote-by-favorites-${environment}`,
+      code: lambda.Code.fromAsset('lambdas/get-quote-by-favorites'),
+      handler: 'index.lambdaHandler',
+      timeout: cdk.Duration.seconds(5),
+      description: 'Returns a random quote from user favorites with optional character filter',
+    });
+    table.grantReadData(getQuoteByFavorites);
+    favoritesTable.grantReadData(getQuoteByFavorites);
+
+    // Lambda: POST /favorites
     const postFavorite = new lambda.Function(this, 'PostFavorite', {
       ...lambdaDefaults,
       functionName: `kaamelott-post-favorite-${environment}`,
@@ -102,16 +120,16 @@ export class KaamelottStack extends cdk.Stack {
     });
     favoritesTable.grantReadWriteData(postFavorite);
 
-    // Lambda: GET /favorites
-    const getFavorite = new lambda.Function(this, 'GetFavorite', {
+    // Lambda: GET /favorites/status
+    const getFavoriteStatus = new lambda.Function(this, 'GetFavoriteStatus', {
       ...lambdaDefaults,
-      functionName: `kaamelott-get-favorite-${environment}`,
-      code: lambda.Code.fromAsset('lambdas/get-favorite'),
+      functionName: `kaamelott-get-favorite-status-${environment}`,
+      code: lambda.Code.fromAsset('lambdas/get-favorite-status'),
       handler: 'index.lambdaHandler',
       timeout: cdk.Duration.seconds(5),
       description: 'Returns whether a quote is liked by a given alias',
     });
-    favoritesTable.grantReadData(getFavorite);
+    favoritesTable.grantReadData(getFavoriteStatus);
 
     // Lambda: GET /characters
     const getCharacters = new lambda.Function(this, 'GetCharacters', {
@@ -158,17 +176,28 @@ export class KaamelottStack extends cdk.Stack {
       },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ['GET'],
+        allowMethods: ['GET', 'POST'],
       },
     });
 
     const quotes = api.root.addResource('quotes');
-    quotes.addMethod('GET', new apigateway.LambdaIntegration(getRandomQuote), {
+    
+    // /quotes/random
+    const randomResource = quotes.addResource('random');
+    randomResource.addMethod('GET', new apigateway.LambdaIntegration(getRandomQuote), {
       apiKeyRequired: true,
     });
-
-    const characterResource = quotes.addResource('{character}');
+    
+    // /quotes/by-character/{character}
+    const byCharacterResource = quotes.addResource('by-character');
+    const characterResource = byCharacterResource.addResource('{character}');
     characterResource.addMethod('GET', new apigateway.LambdaIntegration(getQuoteByCharacter), {
+      apiKeyRequired: true,
+    });
+    
+    // /quotes/by-favorites
+    const byFavoritesResource = quotes.addResource('by-favorites');
+    byFavoritesResource.addMethod('GET', new apigateway.LambdaIntegration(getQuoteByFavorites), {
       apiKeyRequired: true,
     });
 
@@ -176,13 +205,268 @@ export class KaamelottStack extends cdk.Stack {
     favorites.addMethod('POST', new apigateway.LambdaIntegration(postFavorite), {
       apiKeyRequired: true,
     });
-    favorites.addMethod('GET', new apigateway.LambdaIntegration(getFavorite), {
+    
+    // /favorites/status
+    const favoritesStatusResource = favorites.addResource('status');
+    favoritesStatusResource.addMethod('GET', new apigateway.LambdaIntegration(getFavoriteStatus), {
       apiKeyRequired: true,
     });
 
     const characters = api.root.addResource('characters');
     characters.addMethod('GET', new apigateway.LambdaIntegration(getCharacters), {
       apiKeyRequired: true,
+    });
+
+    // API Documentation
+    new apigateway.CfnDocumentationPart(this, 'ApiDescription', {
+      restApiId: api.restApiId,
+      location: { type: 'API' },
+      properties: JSON.stringify({
+        info: {
+          title: 'Kaamelott Quotes API',
+          version: '2.0.0',
+          description: 'API for retrieving Kaamelott quotes with features for random quotes, character filtering, and user favorites management.'
+        }
+      })
+    });
+
+    // /quotes/random documentation
+    new apigateway.CfnDocumentationPart(this, 'QuotesRandomDoc', {
+      restApiId: api.restApiId,
+      location: {
+        type: 'METHOD',
+        method: 'GET',
+        path: '/quotes/random'
+      },
+      properties: JSON.stringify({
+        summary: 'Get random quote(s)',
+        description: 'Returns one or more random Kaamelott quotes. Use batchSize parameter to get multiple quotes in a single request.',
+        parameters: {
+          batchSize: {
+            description: 'Number of quotes to return (1-20, default: 1)',
+            type: 'integer',
+            minimum: 1,
+            maximum: 20,
+            required: false
+          }
+        },
+        responses: {
+          '200': {
+            description: 'Successful response',
+            examples: {
+              'Single quote': {
+                quoteId: '7XLMZGpC',
+                character: 'Alzagar',
+                text: 'Alors, je vais être honnête avec vous...',
+                actor: 'Guillaume Gallienne',
+                film: 'Kaamelott premier volet (2021)',
+                likes: 5
+              },
+              'Multiple quotes': {
+                quotes: [
+                  {
+                    quoteId: '7XLMZGpC',
+                    character: 'Alzagar',
+                    text: 'Alors, je vais être honnête avec vous...',
+                    likes: 5
+                  }
+                ]
+              }
+            }
+          },
+          '400': {
+            description: 'Invalid batchSize parameter'
+          }
+        }
+      })
+    });
+
+    // /quotes/by-character/{character} documentation
+    new apigateway.CfnDocumentationPart(this, 'QuotesByCharacterDoc', {
+      restApiId: api.restApiId,
+      location: {
+        type: 'METHOD',
+        method: 'GET',
+        path: '/quotes/by-character/{character}'
+      },
+      properties: JSON.stringify({
+        summary: 'Get random quote by character',
+        description: 'Returns a random quote from the specified character.',
+        parameters: {
+          character: {
+            description: 'Character name (URL encoded if necessary)',
+            type: 'string',
+            required: true,
+            location: 'path'
+          }
+        },
+        responses: {
+          '200': {
+            description: 'Random quote from the specified character'
+          },
+          '404': {
+            description: 'Character not found'
+          }
+        }
+      })
+    });
+
+    // /quotes/by-favorites documentation
+    new apigateway.CfnDocumentationPart(this, 'QuotesByFavoritesDoc', {
+      restApiId: api.restApiId,
+      location: {
+        type: 'METHOD',
+        method: 'GET',
+        path: '/quotes/by-favorites'
+      },
+      properties: JSON.stringify({
+        summary: 'Get random quote from user favorites',
+        description: 'Returns a random quote from user\'s favorites, optionally filtered by character.',
+        parameters: {
+          alias: {
+            description: 'User identifier',
+            type: 'string',
+            required: true
+          },
+          character: {
+            description: 'Filter favorites by character name (optional)',
+            type: 'string',
+            required: false
+          }
+        },
+        responses: {
+          '200': {
+            description: 'Random quote from user favorites'
+          },
+          '400': {
+            description: 'Missing alias parameter'
+          },
+          '404': {
+            description: 'No favorites found for user or character filter'
+          }
+        }
+      })
+    });
+
+    // POST /favorites documentation
+    new apigateway.CfnDocumentationPart(this, 'PostFavoritesDoc', {
+      restApiId: api.restApiId,
+      location: {
+        type: 'METHOD',
+        method: 'POST',
+        path: '/favorites'
+      },
+      properties: JSON.stringify({
+        summary: 'Add or remove favorite',
+        description: 'Add or remove a quote from user\'s favorites.',
+        requestBody: {
+          description: 'Favorite operation details',
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quoteId', 'alias', 'favorite'],
+                properties: {
+                  quoteId: {
+                    type: 'string',
+                    description: 'Quote identifier'
+                  },
+                  alias: {
+                    type: 'string',
+                    description: 'User identifier'
+                  },
+                  favorite: {
+                    type: 'boolean',
+                    description: 'true to add, false to remove'
+                  }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          '200': {
+            description: 'Favorite updated successfully',
+            example: {
+              quoteId: '7XLMZGpC',
+              alias: 'john_doe',
+              totalLikes: 6
+            }
+          },
+          '400': {
+            description: 'Invalid request body'
+          }
+        }
+      })
+    });
+
+    // GET /favorites/status documentation
+    new apigateway.CfnDocumentationPart(this, 'FavoritesStatusDoc', {
+      restApiId: api.restApiId,
+      location: {
+        type: 'METHOD',
+        method: 'GET',
+        path: '/favorites/status'
+      },
+      properties: JSON.stringify({
+        summary: 'Check favorite status',
+        description: 'Check if a specific quote is favorited by a user.',
+        parameters: {
+          quoteId: {
+            description: 'Quote identifier',
+            type: 'string',
+            required: true
+          },
+          alias: {
+            description: 'User identifier',
+            type: 'string',
+            required: true
+          }
+        },
+        responses: {
+          '200': {
+            description: 'Favorite status',
+            example: {
+              quoteId: '7XLMZGpC',
+              alias: 'john_doe',
+              liked: true
+            }
+          },
+          '400': {
+            description: 'Missing required parameters'
+          }
+        }
+      })
+    });
+
+    // GET /characters documentation
+    new apigateway.CfnDocumentationPart(this, 'CharactersDoc', {
+      restApiId: api.restApiId,
+      location: {
+        type: 'METHOD',
+        method: 'GET',
+        path: '/characters'
+      },
+      properties: JSON.stringify({
+        summary: 'Get all characters',
+        description: 'Returns a sorted list of all available characters.',
+        responses: {
+          '200': {
+            description: 'List of characters',
+            example: {
+              characters: ['Alzagar', 'Angharad', 'Arthur', 'Lancelot']
+            }
+          }
+        }
+      })
+    });
+
+    // Create documentation version
+    new apigateway.CfnDocumentationVersion(this, 'ApiDocsVersion', {
+      restApiId: api.restApiId,
+      documentationVersion: '2.0.0',
+      description: 'Kaamelott Quotes API v2.0.0 - RESTful endpoints with batch support and favorites',
     });
 
     const apiKey = new apigateway.ApiKey(this, 'ApiKey', {
@@ -207,8 +491,8 @@ export class KaamelottStack extends cdk.Stack {
     });
 
     new cdk.CfnOutput(this, 'ApiUrl', {
-      value: `${api.url}quotes`,
-      description: 'Base API URL — append /{character} to filter by character',
+      value: `${api.url}quotes/random`,
+      description: 'Base API URL for random quotes - use /quotes/by-character/{character} for character filtering',
     });
     new cdk.CfnOutput(this, 'LoadQuotesFunctionName', {
       value: loadQuotes.functionName,
