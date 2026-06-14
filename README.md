@@ -25,7 +25,6 @@ S3 (quotes.json)
                         ▼        ▼
                     API Gateway
                    ┌─────────────┐
-                   │ GET /quotes │
                    │ GET /quotes/random │
                    │ GET /quotes/{character} │
                    │ GET /quotes/by-favorites │
@@ -162,13 +161,20 @@ Check if a quote is favorited by a user.
 
 #### GET /quotes/by-favorites
 
-Get a random quote from user's favorites.
+Get a random favorited quote. Both query parameters are optional, giving four behaviours:
+
+| `alias` | `character` | Result |
+|---------|-------------|--------|
+| —       | —           | Any quote favorited by **any** user |
+| —       | set         | Any quote of that character favorited by any user |
+| set     | —           | Any quote favorited by `alias` |
+| set     | set         | Any quote of that character favorited by `alias` |
 
 **Query Parameters:**
-- `alias`: User identifier (required)
-- `character`: Optional character filter
+- `alias`: User identifier (optional). When omitted, quotes favorited by any user are considered.
+- `character`: Character filter (optional).
 
-**Response:** Standard quote object or 404 if no favorites found.
+**Response:** Standard quote object, or `404` when no favorites match the requested combination.
 
 ### Character names with accents
 
