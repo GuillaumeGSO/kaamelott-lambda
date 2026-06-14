@@ -133,14 +133,21 @@ Add or remove a quote from user favorites.
 }
 ```
 
+**Fields:**
+- `quoteId`: Quote identifier (must reference an existing quote)
+- `favorite`: `true` to add, `false` to remove
+- `alias`: User identifier (max 20 characters)
+
 **Response:**
 ```json
 {
   "quoteId": "7XLMZGpC",
   "alias": "username",
-  "totalLikes": 13
+  "likes": 13
 }
 ```
+
+A `400` is returned for an invalid body, a missing field, or an `alias` longer than 20 characters. A `404` is returned when `quoteId` does not reference an existing quote.
 
 #### GET /favorites/status
 
@@ -148,7 +155,7 @@ Check if a quote is favorited by a user.
 
 **Query Parameters:**
 - `quoteId`: Quote identifier
-- `alias`: User identifier
+- `alias`: User identifier (max 20 characters)
 
 **Response:**
 ```json
@@ -171,7 +178,7 @@ Get a random favorited quote. Both query parameters are optional, giving four be
 | set     | set         | Any quote of that character favorited by `alias` |
 
 **Query Parameters:**
-- `alias`: User identifier (optional). When omitted, quotes favorited by any user are considered.
+- `alias`: User identifier (optional, max 20 characters). When omitted, quotes favorited by any user are considered.
 - `character`: Character filter (optional).
 
 **Response:** Standard quote object, or `404` when no favorites match the requested combination.
@@ -260,8 +267,10 @@ aws lambda invoke \
   /tmp/load-result.json
 
 cat /tmp/load-result.json
-# → {"loaded":1028}
+# → {"loaded":1028,"unprocessed":0}
 ```
+
+`loaded` is the number of quotes actually written and `unprocessed` the number DynamoDB skipped (typically under write throttling — these are also logged via `console.warn`). A non-zero `unprocessed` means the load was incomplete; re-run the Lambda.
 
 Repeat for prod (`kaamelott-load-quotes-prod`). Re-run any time the quotes dataset changes.
 

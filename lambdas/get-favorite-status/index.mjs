@@ -1,20 +1,26 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 
-const client = new DynamoDBClient({});
-const dynamo = DynamoDBDocumentClient.from(client);
+const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const FAVORITES_TABLE_NAME = process.env.FAVORITES_TABLE_NAME;
+const MAX_ALIAS_LENGTH = 20;
+
+const jsonResponse = (statusCode, body) => ({
+  statusCode,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
 
 export const lambdaHandler = async (event) => {
   const quoteId = event.queryStringParameters?.quoteId?.trim();
   const alias = event.queryStringParameters?.alias?.trim();
 
   if (!quoteId || !alias) {
-    return {
-      statusCode: 400,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Missing required query parameters: quoteId, alias' }),
-    };
+    return jsonResponse(400, { error: 'Missing required query parameters: quoteId, alias' });
+  }
+
+  if (alias.length > MAX_ALIAS_LENGTH) {
+    return jsonResponse(400, { error: `alias must be at most ${MAX_ALIAS_LENGTH} characters` });
   }
 
   const result = await dynamo.send(new GetCommand({
@@ -22,9 +28,5 @@ export const lambdaHandler = async (event) => {
     Key: { quoteId, alias },
   }));
 
-  return {
-    statusCode: 200,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ quoteId, alias, liked: !!result.Item }),
-  };
+  return jsonResponse(200, { quoteId, alias, liked: !!result.Item });
 };

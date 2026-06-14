@@ -1,10 +1,10 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand, ScanCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 
-const client = new DynamoDBClient({});
-const dynamo = DynamoDBDocumentClient.from(client);
+const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const TABLE_NAME = process.env.TABLE_NAME;
 const FAVORITES_TABLE_NAME = process.env.FAVORITES_TABLE_NAME;
+const MAX_ALIAS_LENGTH = 20;
 
 const jsonResponse = (statusCode, body) => ({
   statusCode,
@@ -24,9 +24,31 @@ const paginate = async (CommandClass, params) => {
   return items;
 };
 
+// Count favorites for a quote, following LastEvaluatedKey so a COUNT spanning multiple 1MB pages stays accurate.
+const countLikes = async (quoteId) => {
+  let count = 0;
+  let ExclusiveStartKey;
+  do {
+    const result = await dynamo.send(new QueryCommand({
+      TableName: FAVORITES_TABLE_NAME,
+      KeyConditionExpression: 'quoteId = :qid',
+      ExpressionAttributeValues: { ':qid': quoteId },
+      Select: 'COUNT',
+      ExclusiveStartKey,
+    }));
+    count += result.Count ?? 0;
+    ExclusiveStartKey = result.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return count;
+};
+
 export const lambdaHandler = async (event) => {
   const alias = event.queryStringParameters?.alias?.trim();
   const character = event.queryStringParameters?.character?.trim();
+
+  if (alias && alias.length > MAX_ALIAS_LENGTH) {
+    return jsonResponse(400, { error: `alias must be at most ${MAX_ALIAS_LENGTH} characters` });
+  }
 
   // Candidate set of favorited quoteIds. With an alias, query that user's favorites via the
   // alias-index. Without an alias, scan the favorites table for every favorited quote (deduped,
@@ -80,18 +102,13 @@ export const lambdaHandler = async (event) => {
 
   const randomQuoteId = favoriteQuoteIds[Math.floor(Math.random() * favoriteQuoteIds.length)];
 
-  const [quoteResult, likesResult] = await Promise.all([
+  const [quoteResult, likes] = await Promise.all([
     dynamo.send(new GetCommand({
       TableName: TABLE_NAME,
       Key: { quoteId: randomQuoteId },
     })),
-    dynamo.send(new QueryCommand({
-      TableName: FAVORITES_TABLE_NAME,
-      KeyConditionExpression: 'quoteId = :qid',
-      ExpressionAttributeValues: { ':qid': randomQuoteId },
-      Select: 'COUNT',
-    })),
+    countLikes(randomQuoteId),
   ]);
 
-  return jsonResponse(200, { ...quoteResult.Item, likes: likesResult.Count ?? 0 });
+  return jsonResponse(200, { ...quoteResult.Item, likes });
 };

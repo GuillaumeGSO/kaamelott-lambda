@@ -9,6 +9,12 @@ const TABLE_NAME = process.env.TABLE_NAME;
 const BUCKET_NAME = process.env.BUCKET_NAME;
 const BATCH_SIZE = 25; // DynamoDB BatchWrite limit
 
+const jsonResponse = (statusCode, body) => ({
+  statusCode,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
 async function streamToString(stream) {
   const chunks = [];
   for await (const chunk of stream) {
@@ -29,17 +35,30 @@ export const lambdaHandler = async () => {
     film: q.film || null,
   }));
 
+  let unprocessedCount = 0;
+
   for (let i = 0; i < quotes.length; i += BATCH_SIZE) {
     const batch = quotes.slice(i, i + BATCH_SIZE);
-    await dynamo.send(new BatchWriteCommand({
+    const result = await dynamo.send(new BatchWriteCommand({
       RequestItems: {
         [TABLE_NAME]: batch.map(q => ({ PutRequest: { Item: q } })),
       },
     }));
+
+    // BatchWrite returns 200 even when it silently skips items (typically on
+    // throttling); the skipped writes come back in UnprocessedItems.
+    const unprocessed = result.UnprocessedItems?.[TABLE_NAME] ?? [];
+    if (unprocessed.length) {
+      unprocessedCount += unprocessed.length;
+      console.warn(
+        `BatchWrite left ${unprocessed.length} item(s) unprocessed in batch starting at index ${i}`
+      );
+    }
   }
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ loaded: quotes.length }),
-  };
+  if (unprocessedCount) {
+    console.warn(`load-quotes finished with ${unprocessedCount} unprocessed item(s) out of ${quotes.length}`);
+  }
+
+  return jsonResponse(200, { loaded: quotes.length - unprocessedCount, unprocessed: unprocessedCount });
 };

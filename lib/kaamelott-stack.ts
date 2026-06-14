@@ -118,6 +118,7 @@ export class KaamelottStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(5),
       description: 'Like or unlike a quote for a given alias',
     });
+    table.grantReadData(postFavorite);
     favoritesTable.grantReadWriteData(postFavorite);
 
     // Lambda: GET /favorites/status
@@ -391,7 +392,7 @@ export class KaamelottStack extends cdk.Stack {
             example: {
               quoteId: '7XLMZGpC',
               alias: 'john_doe',
-              totalLikes: 6
+              likes: 6
             }
           },
           '400': {

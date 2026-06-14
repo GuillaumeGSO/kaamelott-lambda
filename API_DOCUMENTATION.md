@@ -105,7 +105,7 @@ curl -H "x-api-key: YOUR_API_KEY" \
 Returns a random quote from a user's favorites, optionally filtered by character.
 
 **Query Parameters**:
-- `alias` (required): User identifier
+- `alias` (required): User identifier (max 20 characters)
 - `character` (optional): Filter favorites by character
 
 **Examples**:
@@ -123,6 +123,7 @@ curl -H "x-api-key: YOUR_API_KEY" \
 **Response**: Same format as single random quote.
 
 **Error Responses**:
+- `400`: `alias` exceeds 20 characters
 - `404`: No favorites found for the alias
 - `404`: No favorites found matching the character filter
 
@@ -141,8 +142,8 @@ Add or remove a quote from user's favorites.
 ```
 
 **Fields**:
-- `quoteId` (required): The quote identifier
-- `alias` (required): User identifier
+- `quoteId` (required): The quote identifier (must reference an existing quote)
+- `alias` (required): User identifier (max 20 characters)
 - `favorite` (required): `true` to add, `false` to remove
 
 **Example**:
@@ -160,9 +161,13 @@ curl -X POST \
 {
   "quoteId": "7XLMZGpC",
   "alias": "john_doe",
-  "totalLikes": 6
+  "likes": 6
 }
 ```
+
+**Error Responses**:
+- `400`: Invalid JSON body, missing `quoteId`/`favorite`/`alias`, or `alias` exceeds 20 characters
+- `404`: `quoteId` does not reference an existing quote
 
 ### 5. Check Favorite Status
 **Endpoint**: `GET /favorites/status`
@@ -171,7 +176,7 @@ Check if a specific quote is favorited by a user.
 
 **Query Parameters**:
 - `quoteId` (required): The quote identifier
-- `alias` (required): User identifier
+- `alias` (required): User identifier (max 20 characters)
 
 **Example**:
 
@@ -188,6 +193,9 @@ curl -H "x-api-key: YOUR_API_KEY" \
   "liked": true
 }
 ```
+
+**Error Responses**:
+- `400`: Missing `quoteId`/`alias`, or `alias` exceeds 20 characters
 
 ### 6. Get Characters
 **Endpoint**: `GET /characters`

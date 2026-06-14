@@ -1,18 +1,33 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 
-const client = new DynamoDBClient({});
-const dynamo = DynamoDBDocumentClient.from(client);
+const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const TABLE_NAME = process.env.TABLE_NAME;
 const FAVORITES_TABLE_NAME = process.env.FAVORITES_TABLE_NAME;
+const MAX_ALIAS_LENGTH = 20;
 
+const jsonResponse = (statusCode, body) => ({
+  statusCode,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
+// Count favorites for a quote, following LastEvaluatedKey so a COUNT spanning multiple 1MB pages stays accurate.
 const countLikes = async (quoteId) => {
-  const result = await dynamo.send(new QueryCommand({
-    TableName: FAVORITES_TABLE_NAME,
-    KeyConditionExpression: 'quoteId = :qid',
-    ExpressionAttributeValues: { ':qid': quoteId },
-    Select: 'COUNT',
-  }));
-  return result.Count ?? 0;
+  let count = 0;
+  let ExclusiveStartKey;
+  do {
+    const result = await dynamo.send(new QueryCommand({
+      TableName: FAVORITES_TABLE_NAME,
+      KeyConditionExpression: 'quoteId = :qid',
+      ExpressionAttributeValues: { ':qid': quoteId },
+      Select: 'COUNT',
+      ExclusiveStartKey,
+    }));
+    count += result.Count ?? 0;
+    ExclusiveStartKey = result.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return count;
 };
 
 export const lambdaHandler = async (event) => {
@@ -20,37 +35,34 @@ export const lambdaHandler = async (event) => {
   try {
     body = JSON.parse(event.body ?? '{}');
   } catch {
-    return {
-      statusCode: 400,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Invalid JSON body' }),
-    };
+    return jsonResponse(400, { error: 'Invalid JSON body' });
   }
 
   const { quoteId } = body;
   if (!quoteId) {
-    return {
-      statusCode: 400,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Missing required field: quoteId' }),
-    };
+    return jsonResponse(400, { error: 'Missing required field: quoteId' });
   }
 
   if (typeof body.favorite !== 'boolean') {
-    return {
-      statusCode: 400,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Missing required field: favorite (boolean)' }),
-    };
+    return jsonResponse(400, { error: 'Missing required field: favorite (boolean)' });
   }
 
   const alias = body.alias?.trim();
   if (!alias) {
-    return {
-      statusCode: 400,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Missing required field: alias' }),
-    };
+    return jsonResponse(400, { error: 'Missing required field: alias' });
+  }
+
+  if (alias.length > MAX_ALIAS_LENGTH) {
+    return jsonResponse(400, { error: `alias must be at most ${MAX_ALIAS_LENGTH} characters` });
+  }
+
+  const quoteResult = await dynamo.send(new GetCommand({
+    TableName: TABLE_NAME,
+    Key: { quoteId },
+    ProjectionExpression: 'quoteId',
+  }));
+  if (!quoteResult.Item) {
+    return jsonResponse(404, { error: `Quote not found: ${quoteId}` });
   }
 
   if (body.favorite) {
@@ -65,11 +77,7 @@ export const lambdaHandler = async (event) => {
     }));
   }
 
-  const totalLikes = await countLikes(quoteId);
+  const likes = await countLikes(quoteId);
 
-  return {
-    statusCode: 200,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ quoteId, alias, totalLikes }),
-  };
+  return jsonResponse(200, { quoteId, alias, likes });
 };
