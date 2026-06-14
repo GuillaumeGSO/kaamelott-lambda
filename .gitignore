@@ -2,7 +2,6 @@
 cdk.out/
 dist/
 node_modules/
-*.js
 *.d.ts
 cdk.context.json
 
