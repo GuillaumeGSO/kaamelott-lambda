@@ -57,7 +57,7 @@ describe('load-quotes', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
-    expect(body).toEqual({ loaded: 2 });
+    expect(body).toEqual({ loaded: 2, unprocessed: 0 });
     expect(mockS3Send).toHaveBeenCalledTimes(1);
     expect(mockDynamoSend).toHaveBeenCalledTimes(1);
   });
@@ -84,7 +84,7 @@ describe('load-quotes', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
-    expect(body).toEqual({ loaded: 2 });
+    expect(body).toEqual({ loaded: 2, unprocessed: 0 });
   });
 
   test('should batch quotes when count exceeds batch size', async () => {
@@ -110,7 +110,7 @@ describe('load-quotes', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
-    expect(body).toEqual({ loaded: 30 });
+    expect(body).toEqual({ loaded: 30, unprocessed: 0 });
     expect(mockDynamoSend).toHaveBeenCalledTimes(2);
   });
 
@@ -129,7 +129,7 @@ describe('load-quotes', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
-    expect(body).toEqual({ loaded: 0 });
+    expect(body).toEqual({ loaded: 0, unprocessed: 0 });
     expect(mockDynamoSend).not.toHaveBeenCalled();
   });
 });

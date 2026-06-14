@@ -13,6 +13,7 @@ jest.doMock('@aws-sdk/lib-dynamodb', () => ({
     from: jest.fn(() => mockDynamoDBClient)
   },
   QueryCommand: jest.fn(),
+  ScanCommand: jest.fn(),
   GetCommand: jest.fn()
 }));
 
@@ -31,16 +32,18 @@ describe('get-quote-by-favorites', () => {
     });
   });
 
-  test('should return 400 error when alias is missing', async () => {
+  test('should scan all favorites when alias is missing and return 404 when none exist', async () => {
+    mockSend.mockResolvedValueOnce({ Items: [] });
+
     const event = {
       queryStringParameters: {}
     };
     const result = await lambdaHandler(event);
 
-    expect(result.statusCode).toBe(400);
+    expect(result.statusCode).toBe(404);
     const body = JSON.parse(result.body);
     expect(body).toHaveProperty('error');
-    expect(body.error).toContain('Missing required query parameter: alias');
+    expect(body.error).toContain('No favorites found');
   });
 
   test('should return 404 when no favorites found for alias', async () => {
@@ -89,18 +92,19 @@ describe('get-quote-by-favorites', () => {
 
   test('should filter by character when character parameter provided', async () => {
     mockSend
+      // alias-index query: the user's favorited quoteIds
       .mockResolvedValueOnce({
         Items: [{ quoteId: 'quote1' }, { quoteId: 'quote2' }]
       })
+      // character-index query: quoteIds for the requested character
+      .mockResolvedValueOnce({
+        Items: [{ quoteId: 'quote1' }]
+      })
+      // GetCommand for the chosen quote
       .mockResolvedValueOnce({
         Item: { quoteId: 'quote1', character: 'Arthur', text: 'Arthur quote' }
       })
-      .mockResolvedValueOnce({
-        Item: { quoteId: 'quote2', character: 'Lancelot', text: 'Lancelot quote' }
-      })
-      .mockResolvedValueOnce({
-        Item: { quoteId: 'quote1', character: 'Arthur', text: 'Arthur quote' }
-      })
+      // countLikes query
       .mockResolvedValueOnce({
         Count: 2
       });
@@ -117,11 +121,13 @@ describe('get-quote-by-favorites', () => {
 
   test('should return 404 when no favorites match the character filter', async () => {
     mockSend
+      // alias-index query: the user's favorited quoteIds
       .mockResolvedValueOnce({
         Items: [{ quoteId: 'quote1' }]
       })
+      // character-index query: no overlap with the user's favorites
       .mockResolvedValueOnce({
-        Item: { quoteId: 'quote1', character: 'Arthur', text: 'Arthur quote' }
+        Items: [{ quoteId: 'quote2' }]
       });
 
     const event = {
