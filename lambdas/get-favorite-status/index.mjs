@@ -12,8 +12,13 @@ const jsonResponse = (statusCode, body) => ({
 });
 
 export const lambdaHandler = async (event) => {
-  const quoteId = event.queryStringParameters?.quoteId?.trim();
-  const alias = event.queryStringParameters?.alias?.trim();
+  let quoteId, alias;
+  try {
+    quoteId = event.queryStringParameters?.quoteId && decodeURIComponent(event.queryStringParameters.quoteId).trim();
+    alias = event.queryStringParameters?.alias && decodeURIComponent(event.queryStringParameters.alias).trim();
+  } catch {
+    return jsonResponse(400, { error: 'Invalid URL encoding in query parameters' });
+  }
 
   if (!quoteId || !alias) {
     return jsonResponse(400, { error: 'Missing required query parameters: quoteId, alias' });

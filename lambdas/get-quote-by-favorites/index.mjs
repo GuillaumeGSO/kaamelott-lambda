@@ -43,8 +43,13 @@ const countLikes = async (quoteId) => {
 };
 
 export const lambdaHandler = async (event) => {
-  const alias = event.queryStringParameters?.alias?.trim();
-  const character = event.queryStringParameters?.character?.trim();
+  let alias, character;
+  try {
+    alias = event.queryStringParameters?.alias && decodeURIComponent(event.queryStringParameters.alias).trim();
+    character = event.queryStringParameters?.character && decodeURIComponent(event.queryStringParameters.character).trim();
+  } catch {
+    return jsonResponse(400, { error: 'Invalid URL encoding in query parameters' });
+  }
 
   if (alias && alias.length > MAX_ALIAS_LENGTH) {
     return jsonResponse(400, { error: `alias must be at most ${MAX_ALIAS_LENGTH} characters` });

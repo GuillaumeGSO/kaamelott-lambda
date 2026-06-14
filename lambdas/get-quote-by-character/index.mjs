@@ -45,8 +45,12 @@ const countLikes = async (quoteId) => {
 const characterCache = new Map();
 
 export const lambdaHandler = async (event) => {
-  const raw = event.pathParameters?.character ?? '';
-  const character = decodeURIComponent(raw);
+  let character;
+  try {
+    character = decodeURIComponent(event.pathParameters?.character ?? '');
+  } catch {
+    return jsonResponse(400, { error: 'Invalid URL encoding in character parameter' });
+  }
 
   if (!character) {
     return jsonResponse(400, { error: 'Missing character parameter' });
