@@ -41,7 +41,7 @@ Single quote:
   "quoteId": "7XLMZGpC",
   "character": "Alzagar",
   "text": "Alors, je vais être honnête avec vous...",
-  "actor": "Guillaume Gallienne",
+  "actorName": "Guillaume Gallienne",
   "film": "Kaamelott premier volet (2021)",
   "season": null,
   "episode": null,
@@ -57,7 +57,7 @@ Multiple quotes:
       "quoteId": "7XLMZGpC",
       "character": "Alzagar",
       "text": "Alors, je vais être honnête avec vous...",
-      "actor": "Guillaume Gallienne",
+      "actorName": "Guillaume Gallienne",
       "film": "Kaamelott premier volet (2021)",
       "season": null,
       "episode": null,
@@ -67,7 +67,7 @@ Multiple quotes:
       "quoteId": "CdEK6uph",
       "character": "Angharad",
       "text": "Hé ben, si un jour j'oublie que je suis boniche...",
-      "actor": "Vanessa Guedj",
+      "actorName": "Vanessa Guedj",
       "film": "Kaamelott",
       "season": "Livre I",
       "episode": "La Romance de Lancelot",
@@ -228,14 +228,16 @@ All quote responses include the following fields:
 
 ```json
 {
-  "quoteId": "string",      // Unique identifier
-  "character": "string",    // Character name
-  "text": "string",         // Quote text
-  "actor": "string",        // Actor name
-  "film": "string",         // Film/series name
-  "season": "string|null",  // Season (if applicable)
-  "episode": "string|null", // Episode (if applicable)
-  "likes": "number"         // Total likes count
+  "quoteId": "string",               // Unique identifier
+  "character": "string",             // Character name
+  "text": "string",                  // Quote text
+  "actorName": "string",                    // Actor name
+  "film": "string",                         // Film/series name
+  "season": "string|null",                  // Season (TV quotes only, e.g. "Livre I")
+  "episode": "string|null",                 // Episode title (TV quotes only)
+  "likes": "number",                        // Total likes count
+  "youtubeVideoId": "string|null",          // YouTube video ID of the source episode (null for film quotes or unmatched)
+  "youtubeStartSeconds": "number|null"      // Timestamp in seconds where the quote appears (null if no match)
 }
 ```
 

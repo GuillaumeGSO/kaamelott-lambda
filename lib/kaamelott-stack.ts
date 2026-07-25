@@ -259,7 +259,7 @@ export class KaamelottStack extends cdk.Stack {
                 quoteId: '7XLMZGpC',
                 character: 'Alzagar',
                 text: 'Alors, je vais être honnête avec vous...',
-                actor: 'Guillaume Gallienne',
+                actorName: 'Guillaume Gallienne',
                 film: 'Kaamelott premier volet (2021)',
                 likes: 5
               },
