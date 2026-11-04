@@ -81,11 +81,24 @@ See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for full endpoint reference.
 ### Prerequisites
 
 - Node.js 18+
-- AWS CLI configured (`aws configure`)
+- AWS CLI with an SSO profile for the `kaamelott` account (region `eu-west-3`, Paris):
+
+```ini
+[profile kaamelott]
+sso_session = org
+sso_account_id = YOUR_ACCOUNT_ID
+sso_role_name = AdministratorAccess
+region = eu-west-3
+```
+
+```bash
+aws sso login --sso-session org
+```
+
 - CDK bootstrapped for your account/region (one-time):
 
 ```bash
-npx cdk bootstrap aws://YOUR_ACCOUNT_ID/ap-southeast-1
+npx cdk bootstrap aws://YOUR_ACCOUNT_ID/eu-west-3 --profile kaamelott
 ```
 
 ### Install dependencies
@@ -115,8 +128,8 @@ npm run build   # compile TypeScript (CDK infra only)
 ## Deploy
 
 ```bash
-npx cdk deploy --context env=staging
-npx cdk deploy --context env=prod
+npx cdk deploy --context env=staging --profile kaamelott
+npx cdk deploy --context env=prod --profile kaamelott
 ```
 
 After the first deploy, invoke the `load-quotes` Lambda to seed DynamoDB. The function name is printed in the CDK outputs.
@@ -124,7 +137,7 @@ After the first deploy, invoke the `load-quotes` Lambda to seed DynamoDB. The fu
 ```bash
 aws lambda invoke \
   --function-name kaamelott-load-quotes-staging \
-  --region ap-southeast-1 \
+  --region eu-west-3 --profile kaamelott \
   /tmp/load-result.json
 
 cat /tmp/load-result.json
@@ -132,6 +145,8 @@ cat /tmp/load-result.json
 ```
 
 Re-run any time `data/quotes.json` changes. Repeat for prod (`kaamelott-load-quotes-prod`).
+
+> **Note:** `load-quotes` upserts by `quoteId`. Only seed an empty table, or one whose quoteIds match `data/quotes.json`; otherwise quotes are duplicated under new IDs and favorites point to the old ones.
 
 ### Preview changes before deploy
 

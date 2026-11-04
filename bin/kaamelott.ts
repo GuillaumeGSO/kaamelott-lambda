@@ -12,7 +12,7 @@ if (!['staging', 'prod'].includes(env)) {
 
 new KaamelottStack(app, `kaamelott-${env}`, {
   env: {
-    region: 'ap-southeast-1',
+    region: 'eu-west-3',
     account: process.env.CDK_DEFAULT_ACCOUNT,
   },
   environment: env as 'staging' | 'prod',

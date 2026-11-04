@@ -488,7 +488,7 @@ export class KaamelottStack extends cdk.Stack {
     // Outputs
     new cdk.CfnOutput(this, 'ApiKeyId', {
       value: apiKey.keyId,
-      description: 'Look up key value: aws apigateway get-api-key --api-key <id> --include-value --region ap-southeast-1 --query value --output text',
+      description: 'Look up key value: aws apigateway get-api-key --api-key <id> --include-value --region eu-west-3 --query value --output text',
     });
 
     new cdk.CfnOutput(this, 'ApiUrl', {
@@ -497,7 +497,7 @@ export class KaamelottStack extends cdk.Stack {
     });
     new cdk.CfnOutput(this, 'LoadQuotesFunctionName', {
       value: loadQuotes.functionName,
-      description: 'Invoke once per environment to populate DynamoDB: aws lambda invoke --function-name <value> --region ap-southeast-1 /tmp/out.json',
+      description: 'Invoke once per environment to populate DynamoDB: aws lambda invoke --function-name <value> --region eu-west-3 /tmp/out.json',
     });
     new cdk.CfnOutput(this, 'TableName', {
       value: table.tableName,
