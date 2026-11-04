@@ -152,4 +152,36 @@ describe('get-quote-by-character', () => {
     const body = JSON.parse(result.body);
     expect(body).toHaveProperty('likes', 0);
   });
+
+  test('should return 400 error when character is not valid URL encoding', async () => {
+    const event = {
+      pathParameters: { character: '%E0%A4%A' }
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body);
+    expect(body.error).toBe('Invalid URL encoding in character parameter');
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  test('should default likes to 0 when the count query returns no Count', async () => {
+    // Character results are cached at module level: use a character no other test loads,
+    // and drop responses earlier tests left queued.
+    mockSend.mockReset();
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [{ quoteId: 'quote1', character: 'Bohort', text: 'Test quote' }]
+      })
+      .mockResolvedValueOnce({});
+
+    const event = {
+      pathParameters: { character: 'Bohort' }
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body).toMatchObject({ quoteId: 'quote1', likes: 0 });
+  });
 });

@@ -139,4 +139,69 @@ describe('get-quote-by-favorites', () => {
     const body = JSON.parse(result.body);
     expect(body.error).toContain('No favorites found for alias: testuser and character: Lancelot');
   });
+
+  test('should return 400 error when query parameters are not valid URL encoding', async () => {
+    const event = {
+      queryStringParameters: { alias: '%E0%A4%A' }
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body);
+    expect(body.error).toBe('Invalid URL encoding in query parameters');
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 error when alias is too long', async () => {
+    const event = {
+      queryStringParameters: { alias: 'a'.repeat(21) }
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body);
+    expect(body.error).toBe('alias must be at most 20 characters');
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  test('should return 404 when no favorites match the character filter without alias', async () => {
+    mockSend
+      // favorites table scan: every favorited quoteId
+      .mockResolvedValueOnce({
+        Items: [{ quoteId: 'quote1' }]
+      })
+      // character-index query: no overlap with the favorites
+      .mockResolvedValueOnce({
+        Items: [{ quoteId: 'quote2' }]
+      });
+
+    const event = {
+      queryStringParameters: { character: 'Lancelot' }
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(404);
+    const body = JSON.parse(result.body);
+    expect(body.error).toBe('No favorites found for character: Lancelot');
+  });
+
+  test('should default likes to 0 when the count query returns no Count', async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [{ quoteId: 'quote1' }]
+      })
+      .mockResolvedValueOnce({
+        Item: { quoteId: 'quote1', character: 'Arthur', text: 'Test favorite quote' }
+      })
+      .mockResolvedValueOnce({});
+
+    const event = {
+      queryStringParameters: { alias: 'testuser' }
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body).toHaveProperty('likes', 0);
+  });
 });

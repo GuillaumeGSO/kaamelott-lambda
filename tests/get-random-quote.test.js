@@ -104,4 +104,50 @@ describe('get-random-quote', () => {
     const body = JSON.parse(result.body);
     expect(body).toHaveProperty('error');
   });
+
+  // The quoteId list is cached at module level, so these tests load a fresh module to force a new scan.
+  // mockReset also drops queued responses that earlier tests left unconsumed because of that cache.
+  const freshHandler = async () => {
+    mockSend.mockReset();
+    jest.resetModules();
+    return (await import('../lambdas/get-random-quote/index.mjs')).lambdaHandler;
+  };
+
+  test('should follow scan pagination past pages without items', async () => {
+    const handler = await freshHandler();
+    mockSend
+      .mockResolvedValueOnce({ LastEvaluatedKey: { quoteId: 'quote0' } })
+      .mockResolvedValueOnce({ Items: [{ quoteId: 'quote1' }] })
+      .mockResolvedValueOnce({ Item: { quoteId: 'quote1', character: 'Arthur', text: 'Test quote' } })
+      .mockResolvedValueOnce({ Count: 2 });
+
+    const result = await handler({});
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body).toMatchObject({ quoteId: 'quote1', likes: 2 });
+    expect(mockSend).toHaveBeenCalledTimes(4);
+  });
+
+  test('should skip quotes already picked in a batch', async () => {
+    const handler = await freshHandler();
+    const randomSpy = jest.spyOn(Math, 'random')
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0.6);
+    mockSend
+      .mockResolvedValueOnce({ Items: [{ quoteId: 'quote1' }, { quoteId: 'quote2' }] })
+      .mockResolvedValueOnce({ Item: { quoteId: 'quote1', character: 'Arthur', text: 'Test quote 1' } })
+      .mockResolvedValueOnce({ Count: 0 })
+      .mockResolvedValueOnce({ Item: { quoteId: 'quote2', character: 'Lancelot', text: 'Test quote 2' } })
+      .mockResolvedValueOnce({ Count: 0 });
+
+    const result = await handler({ queryStringParameters: { batchSize: '2' } });
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.quotes.map(q => q.quoteId)).toEqual(['quote1', 'quote2']);
+    expect(randomSpy).toHaveBeenCalledTimes(3);
+    randomSpy.mockRestore();
+  });
 });

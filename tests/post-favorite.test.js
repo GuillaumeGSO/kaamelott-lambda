@@ -175,4 +175,46 @@ describe('post-favorite', () => {
     const body = JSON.parse(result.body);
     expect(body.alias).toBe('testuser');
   });
+
+  test('should return 400 error when alias is too long', async () => {
+    const event = {
+      body: JSON.stringify({ quoteId: 'quote1', favorite: true, alias: 'a'.repeat(21) })
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body);
+    expect(body.error).toBe('alias must be at most 20 characters');
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  test('should return 404 error when quote does not exist', async () => {
+    mockSend.mockResolvedValueOnce({});
+
+    const event = {
+      body: JSON.stringify({ quoteId: 'unknown', favorite: true, alias: 'testuser' })
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(404);
+    const body = JSON.parse(result.body);
+    expect(body.error).toBe('Quote not found: unknown');
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  test('should default likes to 0 when the count query returns no Count', async () => {
+    mockSend
+      .mockResolvedValueOnce({ Item: { quoteId: 'quote1' } })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+
+    const event = {
+      body: JSON.stringify({ quoteId: 'quote1', favorite: true, alias: 'testuser' })
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body.likes).toBe(0);
+  });
 });
