@@ -1,0 +1,51 @@
+name: Deploy staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      load_quotes:
+        description: Reload data/quotes.json into DynamoDB after deploy
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write # OIDC token for AWS
+  contents: read
+
+concurrency: deploy-staging
+
+env:
+  AWS_REGION: eu-west-3
+  AWS_ROLE_ARN: arn:aws:iam::022153972216:role/kaamelott-github-deploy-staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging # the AWS role only trusts this environment
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24 # matches the Lambda runtime (NODEJS_24_X)
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - run: npx cdk deploy kaamelott-staging --context env=staging --require-approval never
+
+      - name: Load quotes
+        if: inputs.load_quotes
+        run: |
+          out=$(aws lambda invoke --function-name kaamelott-load-quotes-staging /tmp/load-result.json)
+          echo "$out"
+          cat /tmp/load-result.json
+          # invoke exits 0 even when the function throws; the error is only reported here
+          if echo "$out" | grep -q FunctionError; then exit 1; fi
