@@ -115,7 +115,7 @@ npm run test:watch    # watch mode
 npm run test:coverage # with coverage report
 ```
 
-7 test suites, 38 tests, 100% statement/function/line coverage.
+7 test suites, 52 tests, 100% statement/branch/function/line coverage.
 
 ### Build
 

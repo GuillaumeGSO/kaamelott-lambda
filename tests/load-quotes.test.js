@@ -159,4 +159,36 @@ describe('load-quotes', () => {
     expect(body).toEqual({ loaded: 0, unprocessed: 0 });
     expect(mockDynamoSend).not.toHaveBeenCalled();
   });
+
+  test('should report items left unprocessed by BatchWrite', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const mockQuotes = [
+      { quoteId: 'quote1', character: 'Arthur', text: 'Test quote 1' },
+      { quoteId: 'quote2', character: 'Lancelot', text: 'Test quote 2' }
+    ];
+
+    const mockStream = {
+      async *[Symbol.asyncIterator]() {
+        yield Buffer.from(JSON.stringify(mockQuotes));
+      }
+    };
+
+    mockS3Send.mockResolvedValueOnce({
+      Body: mockStream
+    });
+
+    mockDynamoSend.mockResolvedValueOnce({
+      UnprocessedItems: {
+        'test-quotes-table': [{ PutRequest: { Item: mockQuotes[1] } }]
+      }
+    });
+
+    const result = await lambdaHandler();
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(result.body);
+    expect(body).toEqual({ loaded: 1, unprocessed: 1 });
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    warnSpy.mockRestore();
+  });
 });

@@ -86,4 +86,28 @@ describe('get-favorite-status', () => {
     expect(body).toHaveProperty('alias', 'testuser');
     expect(body).toHaveProperty('liked', false);
   });
+
+  test('should return 400 error when query parameters are not valid URL encoding', async () => {
+    const event = {
+      queryStringParameters: { quoteId: 'quote1', alias: '%E0%A4%A' }
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body);
+    expect(body.error).toBe('Invalid URL encoding in query parameters');
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 error when alias is too long', async () => {
+    const event = {
+      queryStringParameters: { quoteId: 'quote1', alias: 'a'.repeat(21) }
+    };
+    const result = await lambdaHandler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body);
+    expect(body.error).toBe('alias must be at most 20 characters');
+    expect(mockSend).not.toHaveBeenCalled();
+  });
 });
