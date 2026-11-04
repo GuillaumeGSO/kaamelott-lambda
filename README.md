@@ -148,6 +148,12 @@ Re-run any time `data/quotes.json` changes. Repeat for prod (`kaamelott-load-quo
 
 > **Note:** `load-quotes` upserts by `quoteId`. Only seed an empty table, or one whose quoteIds match `data/quotes.json`; otherwise quotes are duplicated under new IDs and favorites point to the old ones.
 
+### Deploy staging from GitHub
+
+Actions → **Deploy staging** → **Run workflow** runs the tests, then `cdk deploy kaamelott-staging`. Tick **load_quotes** to also reload `data/quotes.json` into DynamoDB. Prod is deployed locally only.
+
+The workflow authenticates with GitHub OIDC (no stored AWS keys). It assumes the `kaamelott-github-deploy-staging` IAM role, which trusts only this repo's `staging` GitHub environment and may only use the CDK bootstrap roles and invoke `kaamelott-load-quotes-staging`.
+
 ### Preview changes before deploy
 
 ```bash
