@@ -60,17 +60,17 @@ Serverless REST API returning random quotes from the French comedy series [Kaame
   "quoteId": "CdEK6uph",
   "character": "Perceval",
   "text": "C'est pas faux.",
-  "actor": "Franck Pitiot",
+  "actorName": "Franck Pitiot",
   "film": "Kaamelott",
   "season": "Livre I",
   "episode": "La Quête",
   "likes": 12,
-  "youtube_video_id": "dQw4w9WgXcQ",
-  "youtube_start_seconds": 142
+  "youtubeVideoId": "dQw4w9WgXcQ",
+  "youtubeStartSeconds": 142
 }
 ```
 
-`youtube_video_id` and `youtube_start_seconds` are `null` for film quotes and for TV quotes that could not be matched in a transcript.
+`youtubeVideoId` and `youtubeStartSeconds` are `null` for film quotes and for TV quotes that could not be matched in a transcript.
 
 See [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) for full endpoint reference.
 
@@ -115,7 +115,7 @@ npm run test:watch    # watch mode
 npm run test:coverage # with coverage report
 ```
 
-7 test suites, 37 tests, 100% statement/function/line coverage.
+7 test suites, 38 tests, 100% statement/function/line coverage.
 
 ### Build
 

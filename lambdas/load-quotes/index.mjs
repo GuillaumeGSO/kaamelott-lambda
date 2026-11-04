@@ -33,6 +33,8 @@ export const lambdaHandler = async () => {
   const quotes = JSON.parse(raw).map(q => ({
     ...q,
     film: q.film || null,
+    youtubeVideoId: q.youtubeVideoId ?? null,
+    youtubeStartSeconds: q.youtubeStartSeconds ?? null,
   }));
 
   let unprocessedCount = 0;
