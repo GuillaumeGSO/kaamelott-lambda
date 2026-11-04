@@ -3,6 +3,7 @@ const mockS3Send = jest.fn();
 const mockDynamoSend = jest.fn();
 const mockS3Client = { send: mockS3Send };
 const mockDynamoClient = { send: mockDynamoSend };
+const mockBatchWriteCommand = jest.fn();
 
 jest.doMock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => mockS3Client),
@@ -17,7 +18,7 @@ jest.doMock('@aws-sdk/lib-dynamodb', () => ({
   DynamoDBDocumentClient: {
     from: jest.fn(() => mockDynamoClient)
   },
-  BatchWriteCommand: jest.fn()
+  BatchWriteCommand: mockBatchWriteCommand
 }));
 
 describe('load-quotes', () => {
@@ -85,6 +86,32 @@ describe('load-quotes', () => {
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
     expect(body).toEqual({ loaded: 2, unprocessed: 0 });
+  });
+
+  test('should default missing youtube fields to null', async () => {
+    const mockQuotes = [
+      { quoteId: 'quote1', character: 'Arthur', text: 'Test quote 1' },
+      { quoteId: 'quote2', character: 'Perceval', text: 'Test quote 2', youtubeVideoId: 'abc123', youtubeStartSeconds: 0 }
+    ];
+
+    const mockStream = {
+      async *[Symbol.asyncIterator]() {
+        yield Buffer.from(JSON.stringify(mockQuotes));
+      }
+    };
+
+    mockS3Send.mockResolvedValueOnce({
+      Body: mockStream
+    });
+
+    mockDynamoSend.mockResolvedValueOnce({});
+
+    await lambdaHandler();
+
+    const items = mockBatchWriteCommand.mock.calls[0][0].RequestItems['test-quotes-table']
+      .map(r => r.PutRequest.Item);
+    expect(items[0]).toMatchObject({ youtubeVideoId: null, youtubeStartSeconds: null });
+    expect(items[1]).toMatchObject({ youtubeVideoId: 'abc123', youtubeStartSeconds: 0 });
   });
 
   test('should batch quotes when count exceeds batch size', async () => {
