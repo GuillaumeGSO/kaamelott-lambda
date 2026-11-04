@@ -1,0 +1,20 @@
+name: Tests
+
+on:
+  push:
+    branches: ['**']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24 # matches the Lambda runtime (NODEJS_24_X)
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
