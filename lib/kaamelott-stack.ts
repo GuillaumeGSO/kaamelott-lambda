@@ -5,6 +5,7 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
 
 export interface KaamelottStackProps extends cdk.StackProps {
@@ -485,6 +486,35 @@ export class KaamelottStack extends cdk.Stack {
     });
     usagePlan.addApiKey(apiKey);
 
+    // Dedicated key for the kaamelott-app website: CloudFront injects it server-side, so the
+    // value lives in Secrets Manager and has its own usage plan, sized for public traffic.
+    const webApiKeySecret = new secretsmanager.Secret(this, 'WebApiKeySecret', {
+      secretName: `kaamelott-web-api-key-${environment}`,
+      description: `x-api-key value used by the kaamelott-app CloudFront distribution (${environment})`,
+      generateSecretString: { passwordLength: 40, excludePunctuation: true },
+      removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+    });
+
+    const webApiKey = new apigateway.ApiKey(this, 'WebApiKey', {
+      apiKeyName: `kaamelott-web-${environment}`,
+      description: `API key for the kaamelott-app website (${environment})`,
+      value: webApiKeySecret.secretValue.unsafeUnwrap(),
+    });
+
+    const webUsagePlan = new apigateway.UsagePlan(this, 'WebUsagePlan', {
+      name: `kaamelott-web-usage-plan-${environment}`,
+      apiStages: [{ api, stage: api.deploymentStage }],
+      quota: {
+        limit: 50000,
+        period: apigateway.Period.DAY,
+      },
+      throttle: {
+        rateLimit: 20,
+        burstLimit: 40,
+      },
+    });
+    webUsagePlan.addApiKey(webApiKey);
+
     // Outputs
     new cdk.CfnOutput(this, 'ApiKeyId', {
       value: apiKey.keyId,
@@ -504,6 +534,10 @@ export class KaamelottStack extends cdk.Stack {
     });
     new cdk.CfnOutput(this, 'BucketName', {
       value: bucket.bucketName,
+    });
+    new cdk.CfnOutput(this, 'WebApiKeySecretName', {
+      value: webApiKeySecret.secretName,
+      description: 'Secrets Manager secret holding the kaamelott-app API key value',
     });
   }
 }
