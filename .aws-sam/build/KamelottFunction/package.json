@@ -1,9 +1,0 @@
-{
-  "name": "kamelott",
-  "version": "1.1.0",
-  "description": "Kaamelott lorem ipsum Lambda",
-  "type": "module",
-  "main": "app.mjs",
-  "license": "MIT",
-  "dependencies": {}
-}
