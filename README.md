@@ -32,7 +32,10 @@ Serverless REST API returning random quotes from the French comedy series [Kaame
            │ GET  /quotes/random       │
            │ GET  /quotes/by-character │
            │ GET  /quotes/by-favorites │
+           │ GET  /quotes/all          │
+           │ GET  /quotes/likes        │
            │ GET  /characters          │
+           │ GET  /favorites           │
            │ POST /favorites           │
            │ GET  /favorites/status    │
            └──────────────────────────┘
@@ -49,9 +52,14 @@ Serverless REST API returning random quotes from the French comedy series [Kaame
 | `GET` | `/quotes/random` | Random quote(s), optional `?batchSize=1..20` |
 | `GET` | `/quotes/by-character/{character}` | Random quote from a specific character |
 | `GET` | `/quotes/by-favorites` | Random quote from a user's favorites |
+| `GET` | `/quotes/all` | Every quote, without like counts (sent with `Cache-Control: public, max-age=3600`) |
+| `GET` | `/quotes/likes` | Like count of every liked quote |
 | `GET` | `/characters` | Sorted list of all characters with quote counts |
+| `GET` | `/favorites` | QuoteIds liked by a user (`?alias=`) |
 | `POST` | `/favorites` | Add or remove a quote from favorites |
 | `GET` | `/favorites/status` | Check if a quote is favorited by a user |
+
+`/quotes/all`, `/quotes/likes` and `GET /favorites` serve the [kaamelott-app](https://github.com/GuillaumeGSO/kaamelott-app) website. It loads every quote once and filters in the browser, and its CloudFront caches the first two (1 day and 5 minutes). A visit then costs about 2 API calls instead of one or two per quote shown. The website's key (`kaamelott-web-<env>`) has its own usage plan: 5,000 calls/day on staging, 10,000 on prod, 20 calls/s (burst 40).
 
 ### Quote response format
 
@@ -182,6 +190,9 @@ npx cdk destroy --context env=staging
 │   ├── get-quote-by-favorites/       # GET /quotes/by-favorites
 │   ├── get-favorite-status/          # GET /favorites/status
 │   ├── get-characters/               # GET /characters
+│   ├── get-all-quotes/               # GET /quotes/all
+│   ├── get-likes/                    # GET /quotes/likes
+│   ├── get-favorites/                # GET /favorites
 │   ├── post-favorite/                # POST /favorites
 │   └── load-quotes/                  # Admin: load quotes.json from S3 → DynamoDB
 ├── tests/                            # Jest test suites (one per Lambda)
