@@ -222,6 +222,58 @@ curl -H "x-api-key: YOUR_API_KEY" \
 }
 ```
 
+### 7. Get All Quotes
+**Endpoint**: `GET /quotes/all`
+
+Returns every quote, without like counts (see `/quotes/likes`). Meant to be loaded once and filtered client-side: the kaamelott-app website caches it in CloudFront. Responses carry `Cache-Control: public, max-age=3600`.
+
+**Response**:
+```json
+{
+  "quotes": [
+    {
+      "quoteId": "7XLMZGpC",
+      "character": "Alzagar",
+      "text": "Alors, je vais être honnête avec vous...",
+      "actorName": "Guillaume Gallienne",
+      "film": "Kaamelott premier volet (2021)"
+    }
+  ]
+}
+```
+
+### 8. Get Like Counts
+**Endpoint**: `GET /quotes/likes`
+
+Returns the like count of every liked quote. Quotes with no likes are left out.
+
+**Response**:
+```json
+{
+  "likes": { "7XLMZGpC": 5, "FF4ESRWn": 1 }
+}
+```
+
+### 9. Get Favorites of a User
+**Endpoint**: `GET /favorites`
+
+Returns the quoteIds liked by an alias.
+
+**Query Parameters**:
+- `alias` (required): User identifier (max 20 characters)
+
+**Response**:
+```json
+{
+  "alias": "john_doe",
+  "quoteIds": ["7XLMZGpC", "FF4ESRWn"]
+}
+```
+
+**Status Codes**:
+- `200`: Success (an empty `quoteIds` list when the alias has no likes)
+- `400`: Missing or too long alias
+
 ## Quote Object Structure
 
 All quote responses include the following fields:
@@ -262,6 +314,7 @@ All error responses follow this format:
 ## Rate Limits
 
 - **Daily Limit**: 1,000 requests per API key
+- **Website key** (`kaamelott-web-<env>`): 5,000 requests per day on staging, 10,000 on prod, 20 requests/s (burst 40)
 - **Concurrent Requests**: Standard AWS API Gateway limits apply
 
 ## Migration from Previous API

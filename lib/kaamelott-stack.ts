@@ -144,6 +144,40 @@ export class KaamelottStack extends cdk.Stack {
     });
     table.grantReadData(getCharacters);
 
+    // Lambda: GET /quotes/all (cached by the website's CloudFront)
+    const getAllQuotes = new lambda.Function(this, 'GetAllQuotes', {
+      ...lambdaDefaults,
+      functionName: `kaamelott-get-all-quotes-${environment}`,
+      code: lambda.Code.fromAsset('lambdas/get-all-quotes'),
+      handler: 'index.lambdaHandler',
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 256,
+      description: 'Returns every quote, without like counts',
+    });
+    table.grantReadData(getAllQuotes);
+
+    // Lambda: GET /quotes/likes (cached by the website's CloudFront)
+    const getLikes = new lambda.Function(this, 'GetLikes', {
+      ...lambdaDefaults,
+      functionName: `kaamelott-get-likes-${environment}`,
+      code: lambda.Code.fromAsset('lambdas/get-likes'),
+      handler: 'index.lambdaHandler',
+      timeout: cdk.Duration.seconds(10),
+      description: 'Returns the like count of every liked quote',
+    });
+    favoritesTable.grantReadData(getLikes);
+
+    // Lambda: GET /favorites
+    const getFavorites = new lambda.Function(this, 'GetFavorites', {
+      ...lambdaDefaults,
+      functionName: `kaamelott-get-favorites-${environment}`,
+      code: lambda.Code.fromAsset('lambdas/get-favorites'),
+      handler: 'index.lambdaHandler',
+      timeout: cdk.Duration.seconds(5),
+      description: 'Returns the quoteIds liked by a given alias',
+    });
+    favoritesTable.grantReadData(getFavorites);
+
     // Lambda: admin loader (no API route)
     const loadQuotes = new lambda.Function(this, 'LoadQuotes', {
       ...lambdaDefaults,
@@ -203,7 +237,20 @@ export class KaamelottStack extends cdk.Stack {
       apiKeyRequired: true,
     });
 
+    // /quotes/all
+    quotes.addResource('all').addMethod('GET', new apigateway.LambdaIntegration(getAllQuotes), {
+      apiKeyRequired: true,
+    });
+
+    // /quotes/likes
+    quotes.addResource('likes').addMethod('GET', new apigateway.LambdaIntegration(getLikes), {
+      apiKeyRequired: true,
+    });
+
     const favorites = api.root.addResource('favorites');
+    favorites.addMethod('GET', new apigateway.LambdaIntegration(getFavorites), {
+      apiKeyRequired: true,
+    });
     favorites.addMethod('POST', new apigateway.LambdaIntegration(postFavorite), {
       apiKeyRequired: true,
     });
@@ -505,7 +552,7 @@ export class KaamelottStack extends cdk.Stack {
       name: `kaamelott-web-usage-plan-${environment}`,
       apiStages: [{ api, stage: api.deploymentStage }],
       quota: {
-        limit: 50000,
+        limit: isProd ? 10000 : 5000,
         period: apigateway.Period.DAY,
       },
       throttle: {
