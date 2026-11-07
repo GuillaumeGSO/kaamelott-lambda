@@ -133,6 +133,22 @@ npm run build   # compile TypeScript (CDK infra only)
 
 ---
 
+## Contract tests (Pact)
+
+The [kaamelott-app](https://github.com/GuillaumeGSO/kaamelott-app) website is a Pact **consumer** of this API: it writes a contract, the requests it sends and the response shapes it relies on (`/quotes/all`, `/quotes/likes`, `GET` and `POST /favorites`). This API is the **provider** and verifies it. There's no Pact Broker: the contract is a file committed in kaamelott-app, read from raw GitHub URLs (public repo, no token).
+
+- `tests/pact/provider.pact.js` serves the real Lambda handlers through a small HTTP server that builds API Gateway proxy events. It runs over an in-memory DynamoDB that each Pact *provider state* seeds ("merlin has liked quote q1"…).
+- `npm run pact:verify` runs it, kept out of `npm test`. By default it verifies the contract on the site's `main`. `PACT_URLS` overrides that with space-separated URLs or file paths.
+- The **Pact verify** workflow runs on every push. It checks the site's `main` contract, plus the site branch with the same name as the pushed branch, if it exists. A manual run takes an API branch ("Use workflow from") and any contract URL.
+- **Deploy staging** runs `pact:verify` before deploying (the equivalent of Pact's `can-i-deploy`).
+- A failure means the API no longer returns what the site expects: fix the API, or change the contract on the site side first.
+- GitHub caches raw files for about 5 minutes, so a just-merged contract can take a moment to show up.
+
+```bash
+npm run pact:verify                                                            # site main
+PACT_URLS=../kaamelott-app/pacts/kaamelott-app-kaamelott-lambda.json npm run pact:verify   # local site checkout
+```
+
 ## Deploy
 
 ```bash
@@ -158,7 +174,7 @@ Re-run any time `data/quotes.json` changes. Repeat for prod (`kaamelott-load-quo
 
 ### Deploy staging from GitHub
 
-Actions → **Deploy staging** → **Run workflow** runs the tests, then `cdk deploy kaamelott-staging`. Tick **load_quotes** to also reload `data/quotes.json` into DynamoDB. Prod is deployed locally only.
+Actions → **Deploy staging** → **Run workflow** runs the tests and the Pact check, then `cdk deploy kaamelott-staging`. Tick **load_quotes** to also reload `data/quotes.json` into DynamoDB. Prod is deployed locally only.
 
 The workflow authenticates with GitHub OIDC (no stored AWS keys). It assumes the `kaamelott-github-deploy-staging` IAM role, which trusts only this repo's `staging` GitHub environment and may only use the CDK bootstrap roles and invoke `kaamelott-load-quotes-staging`.
 
@@ -196,6 +212,7 @@ npx cdk destroy --context env=staging
 │   ├── post-favorite/                # POST /favorites
 │   └── load-quotes/                  # Admin: load quotes.json from S3 → DynamoDB
 ├── tests/                            # Jest test suites (one per Lambda)
+│   └── pact/provider.pact.js         # Pact verification of the kaamelott-app contract
 ├── data/
 │   └── quotes.json                   # Source quotes (produced by kamelott-scrapping)
 ├── API_DOCUMENTATION.md
