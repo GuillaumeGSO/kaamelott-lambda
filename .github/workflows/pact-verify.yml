@@ -1,0 +1,67 @@
+name: Pact verify
+
+# Checks that this API still honours the contract of the kaamelott-app site (see README,
+# Contract tests). No token: the site repo is public, contracts are read from raw GitHub URLs.
+on:
+  # Every push: the site's main contract, plus the site branch with the same name if it exists.
+  push:
+    branches: ['**']
+  # Manual run: pick the API branch in "Use workflow from", paste any contract URL.
+  workflow_dispatch:
+    inputs:
+      pact_url:
+        description: Contract to verify (raw URL of a kaamelott-app pacts/*.json)
+        type: string
+        required: true
+        default: https://raw.githubusercontent.com/GuillaumeGSO/kaamelott-app/refs/heads/main/pacts/kaamelott-app-kaamelott-lambda.json
+
+permissions:
+  contents: read
+
+env:
+  SITE_RAW: https://raw.githubusercontent.com/GuillaumeGSO/kaamelott-app/refs/heads
+  CONTRACT: pacts/kaamelott-app-kaamelott-lambda.json
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Pick the contracts to verify
+        env:
+          MANUAL_URL: ${{ inputs.pact_url }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          exists() { curl -fsIL -o /dev/null "$1"; }
+          if [ -n "$MANUAL_URL" ]; then
+            urls="$MANUAL_URL"
+          else
+            urls=""
+            main_url="$SITE_RAW/main/$CONTRACT"
+            if exists "$main_url"; then
+              urls="$main_url"
+            else
+              echo "::warning::No contract on the site's main yet ($main_url)"
+            fi
+            branch_url="$SITE_RAW/$BRANCH/$CONTRACT"
+            if [ "$BRANCH" != main ] && exists "$branch_url"; then
+              echo "::notice::Site branch '$BRANCH' has a contract too: verifying it as well"
+              urls="$urls $branch_url"
+            fi
+          fi
+          if [ -z "${urls// }" ]; then
+            echo "::error::No contract to verify"
+            exit 1
+          fi
+          echo "Contracts: $urls"
+          echo "PACT_URLS=$urls" >> "$GITHUB_ENV"
+
+      - run: npm ci
+
+      - run: npm run pact:verify

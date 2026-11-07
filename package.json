@@ -6,7 +6,8 @@
     "cdk": "cdk",
     "test": "NODE_OPTIONS=\"--experimental-vm-modules\" jest",
     "test:watch": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --watch",
-    "test:coverage": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage"
+    "test:coverage": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --coverage",
+    "pact:verify": "NODE_OPTIONS=\"--experimental-vm-modules\" jest --testMatch '**/tests/pact/*.pact.js'"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -15,6 +16,7 @@
     "@aws-sdk/client-dynamodb": "^3.967.0",
     "@aws-sdk/client-s3": "^3.967.0",
     "@aws-sdk/lib-dynamodb": "^3.967.0",
+    "@pact-foundation/pact": "^17.1.4",
     "@types/jest": "^29.5.0",
     "@types/node": "~20",
     "aws-cdk": "^2.200.0",

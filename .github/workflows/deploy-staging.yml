@@ -34,6 +34,9 @@ jobs:
 
       - run: npm test
 
+      # can-i-deploy: this API must honour the contract of the site on main (see README).
+      - run: npm run pact:verify
+
       - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
