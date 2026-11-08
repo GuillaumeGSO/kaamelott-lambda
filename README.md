@@ -43,6 +43,8 @@ Serverless REST API returning random quotes from the French comedy series [Kaame
 
 **Environments:** `staging` and `prod`, each with independent DynamoDB tables, Lambda functions, and API Gateway stage.
 
+**Design decisions and limits** (why the website loads every quote at once, the caching layers, the shared quota, pseudos instead of accounts, and when each should change) are written up once for the whole system in [kaamelott-app's README](https://github.com/GuillaumeGSO/kaamelott-app#design-decisions-and-limits).
+
 ---
 
 ## API Endpoints
