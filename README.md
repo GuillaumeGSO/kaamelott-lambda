@@ -175,7 +175,7 @@ Re-run any time `data/quotes.json` changes. Repeat for prod (`kaamelott-load-quo
 
 Writes that DynamoDB leaves unprocessed (throttling) are retried with exponential backoff, up to 5 attempts per batch of 25. If some are still unwritten after that, the function fails (`FunctionError` in the `aws lambda invoke` output), so the deploy workflow fails too.
 
-Reloaded quotes reach the website within a day: `/quotes/all` keeps no cache of its own, but the site's CloudFront caches it for a day, and browsers for an hour. The GitHub workflow refreshes CloudFront by itself after a reload (see below). After a local reload, invalidate `/quotes/all` on the site's distribution (its `DistributionId` is an output of the `kaamelott-app-<env>` stack):
+Reloaded quotes reach the website within a day: `/quotes/all` keeps no cache of its own, but the site's CloudFront caches it for a day, and browsers for an hour. To show them right away, invalidate `/quotes/all` on the site's distribution (its `DistributionId` is an output of the `kaamelott-app-<env>` stack):
 
 ```bash
 aws cloudfront create-invalidation --distribution-id <DistributionId> --paths /quotes/all --profile kaamelott
@@ -185,9 +185,9 @@ aws cloudfront create-invalidation --distribution-id <DistributionId> --paths /q
 
 ### Deploy staging from GitHub
 
-Actions → **Deploy staging** → **Run workflow** runs the tests and the Pact check, then `cdk deploy kaamelott-staging`. Tick **load_quotes** to also reload `data/quotes.json` into DynamoDB, then invalidate `/quotes/all` on the staging site's CloudFront, so the new quotes show right away (browsers that loaded the site in the last hour keep their copy until it expires). Prod is deployed locally only. The workflow reads `ALARM_EMAIL` from a repository **secret** (Settings → Secrets and variables → Actions), not a variable, so it's masked in the public logs.
+Actions → **Deploy staging** → **Run workflow** runs the tests and the Pact check, then `cdk deploy kaamelott-staging`. Tick **load_quotes** to also reload `data/quotes.json` into DynamoDB. Prod is deployed locally only. The workflow reads `ALARM_EMAIL` from a repository **secret** (Settings → Secrets and variables → Actions), not a variable, so it's masked in the public logs.
 
-The workflow authenticates with GitHub OIDC (no stored AWS keys). It assumes the `kaamelott-github-deploy-staging` IAM role, which trusts only this repo's `staging` GitHub environment and may only use the CDK bootstrap roles, invoke `kaamelott-load-quotes-staging`, read the `kaamelott-app-staging` stack (for its `DistributionId`) and create invalidations on that distribution.
+The workflow authenticates with GitHub OIDC (no stored AWS keys). It assumes the `kaamelott-github-deploy-staging` IAM role, which trusts only this repo's `staging` GitHub environment and may only use the CDK bootstrap roles and invoke `kaamelott-load-quotes-staging`.
 
 ### Alarms
 
