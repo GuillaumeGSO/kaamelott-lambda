@@ -1,4 +1,5 @@
 const mockSend = jest.fn();
+const mockScanCommand = jest.fn();
 const mockDynamoDBClient = {
   send: mockSend
 };
@@ -11,7 +12,7 @@ jest.doMock('@aws-sdk/lib-dynamodb', () => ({
   DynamoDBDocumentClient: {
     from: jest.fn(() => mockDynamoDBClient)
   },
-  ScanCommand: jest.fn()
+  ScanCommand: mockScanCommand
 }));
 
 describe('get-all-quotes', () => {
@@ -39,6 +40,14 @@ describe('get-all-quotes', () => {
     const body = JSON.parse(result.body);
     expect(body.quotes.map(q => q.quoteId)).toEqual(['a', 'b']);
     expect(body.quotes[0]).toEqual({ quoteId: 'a', character: 'Arthur', text: 'Non.' });
+  });
+
+  test('should read with strong consistency, so a scan right after a reload sees every write', async () => {
+    mockSend.mockResolvedValueOnce({ Items: [] });
+
+    await lambdaHandler();
+
+    expect(mockScanCommand).toHaveBeenCalledWith(expect.objectContaining({ ConsistentRead: true }));
   });
 
   test('should follow pagination', async () => {

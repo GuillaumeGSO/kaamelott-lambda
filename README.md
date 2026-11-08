@@ -175,7 +175,17 @@ Re-run any time `data/quotes.json` changes. Repeat for prod (`kaamelott-load-quo
 
 Writes that DynamoDB leaves unprocessed (throttling) are retried with exponential backoff, up to 5 attempts per batch of 25. If some are still unwritten after that, the function fails (`FunctionError` in the `aws lambda invoke` output), so the deploy workflow fails too.
 
-Reloaded quotes reach the website within a day: `/quotes/all` keeps no cache of its own, but the site's CloudFront caches it for a day, and browsers for an hour. To show them right away, invalidate `/quotes/all` on the site's distribution (its `DistributionId` is an output of the `kaamelott-app-<env>` stack):
+Once every quote is written, `load-quotes` publishes a `QuotesReloaded` event on the account's default EventBridge bus. This repo doesn't know who listens: the event is the contract. The [kaamelott-app](https://github.com/GuillaumeGSO/kaamelott-app) stack listens and invalidates `/quotes/all` on its CloudFront, so reloaded quotes reach the website right away, whether the reload ran from GitHub or from your machine (browsers that loaded the site in the last hour keep their copy until it expires).
+
+```json
+{
+  "source": "kaamelott.quotes",
+  "detail-type": "QuotesReloaded",
+  "detail": { "environment": "staging", "count": 1028 }
+}
+```
+
+`environment` is `staging` or `prod`: both share the account's default bus, so a listener must filter on it. Changing this shape is a breaking change for the website. If the event can't be published, the function fails (the quotes are written, but the site keeps its cached copy for up to a day). To refresh by hand, invalidate `/quotes/all` on the site's distribution (its `DistributionId` is an output of the `kaamelott-app-<env>` stack):
 
 ```bash
 aws cloudfront create-invalidation --distribution-id <DistributionId> --paths /quotes/all --profile kaamelott

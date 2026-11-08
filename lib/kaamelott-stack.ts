@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as events from 'aws-cdk-lib/aws-events';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
@@ -199,10 +200,12 @@ export class KaamelottStack extends cdk.Stack {
         ...commonEnv,
         BUCKET_NAME: bucket.bucketName,
       },
-      description: 'One-time loader: reads quotes.json from S3 and batch-writes to DynamoDB',
+      description: 'Loader: reads quotes.json from S3, batch-writes it to DynamoDB, then publishes QuotesReloaded',
     });
     table.grantWriteData(loadQuotes);
     bucket.grantRead(loadQuotes);
+    // Announces QuotesReloaded on the account's default bus; the website's stack listens (README).
+    events.EventBus.fromEventBusName(this, 'DefaultEventBus', 'default').grantPutEventsTo(loadQuotes);
 
     // API Gateway
     const apiLogGroup = new logs.LogGroup(this, 'ApiAccessLogs', {

@@ -29,7 +29,9 @@ const paginate = async (CommandClass, params) => {
 // the response (a day per edge region), and a cache here kept serving the old quotes after a
 // reload until the next cold start.
 export const lambdaHandler = async () => {
-  const items = await paginate(ScanCommand, { TableName: TABLE_NAME });
+  // Strongly consistent: this runs right after a reload (CloudFront refetches once the site
+  // invalidates its copy), and a read missing the last writes would then be cached for a day.
+  const items = await paginate(ScanCommand, { TableName: TABLE_NAME, ConsistentRead: true });
   // Stable order, so identical data gives an identical response.
   const quotes = items.sort((a, b) => a.quoteId.localeCompare(b.quoteId));
 
