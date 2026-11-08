@@ -168,10 +168,18 @@ aws lambda invoke \
   /tmp/load-result.json
 
 cat /tmp/load-result.json
-# → {"loaded":1028,"unprocessed":0}
+# → {"loaded":1028}
 ```
 
 Re-run any time `data/quotes.json` changes. Repeat for prod (`kaamelott-load-quotes-prod`).
+
+Writes that DynamoDB leaves unprocessed (throttling) are retried with exponential backoff, up to 5 attempts per batch of 25. If some are still unwritten after that, the function fails (`FunctionError` in the `aws lambda invoke` output), so the deploy workflow fails too.
+
+Reloaded quotes reach the website within a day: `/quotes/all` keeps no cache of its own, but the site's CloudFront caches it for a day, and browsers for an hour. To show them right away, invalidate `/quotes/all` on the site's distribution (its `DistributionId` is an output of the `kaamelott-app-<env>` stack):
+
+```bash
+aws cloudfront create-invalidation --distribution-id <DistributionId> --paths /quotes/all --profile kaamelott
+```
 
 > **Note:** `load-quotes` upserts by `quoteId`. Only seed an empty table, or one whose quoteIds match `data/quotes.json`; otherwise quotes are duplicated under new IDs and favorites point to the old ones.
 

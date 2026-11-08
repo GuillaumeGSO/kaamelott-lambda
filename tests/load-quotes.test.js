@@ -58,7 +58,7 @@ describe('load-quotes', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
-    expect(body).toEqual({ loaded: 2, unprocessed: 0 });
+    expect(body).toEqual({ loaded: 2 });
     expect(mockS3Send).toHaveBeenCalledTimes(1);
     expect(mockDynamoSend).toHaveBeenCalledTimes(1);
   });
@@ -85,7 +85,7 @@ describe('load-quotes', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
-    expect(body).toEqual({ loaded: 2, unprocessed: 0 });
+    expect(body).toEqual({ loaded: 2 });
   });
 
   test('should default missing youtube fields to null', async () => {
@@ -137,7 +137,7 @@ describe('load-quotes', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
-    expect(body).toEqual({ loaded: 30, unprocessed: 0 });
+    expect(body).toEqual({ loaded: 30 });
     expect(mockDynamoSend).toHaveBeenCalledTimes(2);
   });
 
@@ -156,39 +156,60 @@ describe('load-quotes', () => {
 
     expect(result.statusCode).toBe(200);
     const body = JSON.parse(result.body);
-    expect(body).toEqual({ loaded: 0, unprocessed: 0 });
+    expect(body).toEqual({ loaded: 0 });
     expect(mockDynamoSend).not.toHaveBeenCalled();
   });
 
-  test('should report items left unprocessed by BatchWrite', async () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const mockQuotes = [
+  describe('items left unprocessed by BatchWrite', () => {
+    const quotes = [
       { quoteId: 'quote1', character: 'Arthur', text: 'Test quote 1' },
       { quoteId: 'quote2', character: 'Lancelot', text: 'Test quote 2' }
     ];
+    const unprocessed = { UnprocessedItems: { 'test-quotes-table': [{ PutRequest: { Item: quotes[1] } }] } };
+    let warnSpy;
 
-    const mockStream = {
-      async *[Symbol.asyncIterator]() {
-        yield Buffer.from(JSON.stringify(mockQuotes));
-      }
-    };
-
-    mockS3Send.mockResolvedValueOnce({
-      Body: mockStream
+    beforeEach(() => {
+      // The retries wait (backoff): fake timers keep the tests instant.
+      jest.useFakeTimers();
+      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      mockS3Send.mockResolvedValueOnce({
+        Body: {
+          async *[Symbol.asyncIterator]() {
+            yield Buffer.from(JSON.stringify(quotes));
+          }
+        }
+      });
     });
 
-    mockDynamoSend.mockResolvedValueOnce({
-      UnprocessedItems: {
-        'test-quotes-table': [{ PutRequest: { Item: mockQuotes[1] } }]
-      }
+    afterEach(() => {
+      jest.useRealTimers();
+      warnSpy.mockRestore();
     });
 
-    const result = await lambdaHandler();
+    test('should retry only the unprocessed items until they are written', async () => {
+      mockDynamoSend
+        .mockResolvedValueOnce(unprocessed)
+        .mockResolvedValueOnce(unprocessed)
+        .mockResolvedValueOnce({});
 
-    expect(result.statusCode).toBe(200);
-    const body = JSON.parse(result.body);
-    expect(body).toEqual({ loaded: 1, unprocessed: 1 });
-    expect(warnSpy).toHaveBeenCalledTimes(2);
-    warnSpy.mockRestore();
+      const pending = lambdaHandler();
+      await jest.runAllTimersAsync();
+      const result = await pending;
+
+      expect(JSON.parse(result.body)).toEqual({ loaded: 2 });
+      expect(mockDynamoSend).toHaveBeenCalledTimes(3);
+      const retried = mockBatchWriteCommand.mock.calls[1][0].RequestItems['test-quotes-table'];
+      expect(retried).toEqual([{ PutRequest: { Item: quotes[1] } }]);
+    });
+
+    test('should fail after 5 attempts, so the deploy workflow fails too', async () => {
+      mockDynamoSend.mockResolvedValue(unprocessed);
+
+      const assertion = expect(lambdaHandler()).rejects.toThrow('left 1 of 2 quote(s) unwritten after 5 attempts');
+      await jest.runAllTimersAsync();
+      await assertion;
+
+      expect(mockDynamoSend).toHaveBeenCalledTimes(5);
+    });
   });
 });
