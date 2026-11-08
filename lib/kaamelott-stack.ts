@@ -2,22 +2,29 @@ import * as cdk from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as cloudwatchActions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as sns from 'aws-cdk-lib/aws-sns';
 import { Construct } from 'constructs';
 
 export interface KaamelottStackProps extends cdk.StackProps {
   environment: 'staging' | 'prod';
+  /** Where alarms are emailed. Kept out of the (public) repo: see bin/kaamelott.ts */
+  alarmEmail: string;
 }
 
 export class KaamelottStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: KaamelottStackProps) {
     super(scope, id, props);
 
-    const { environment } = props;
+    const { environment, alarmEmail } = props;
     const isProd = environment === 'prod';
+    // Daily calls allowed to the website's key (see WebUsagePlan); the quota alarm warns before it.
+    const webDailyQuota = isProd ? 5000 : 1000;
 
     // S3 bucket — stores quotes.json, uploaded on every cdk deploy
     const bucket = new s3.Bucket(this, 'QuotesBucket', {
@@ -552,7 +559,7 @@ export class KaamelottStack extends cdk.Stack {
       name: `kaamelott-web-usage-plan-${environment}`,
       apiStages: [{ api, stage: api.deploymentStage }],
       quota: {
-        limit: isProd ? 10000 : 5000,
+        limit: webDailyQuota,
         period: apigateway.Period.DAY,
       },
       throttle: {
@@ -561,6 +568,42 @@ export class KaamelottStack extends cdk.Stack {
       },
     });
     webUsagePlan.addApiKey(webApiKey);
+
+    // Alarms, emailed through SNS (the subscription must be confirmed once from the email).
+    const alarmTopic = new sns.Topic(this, 'AlarmTopic', {
+      topicName: `kaamelott-alarms-${environment}`,
+    });
+    // A fixed id: addSubscription() would put the address in the logical id, hence in the deploy logs.
+    new sns.Subscription(this, 'AlarmEmailSubscription', {
+      topic: alarmTopic,
+      protocol: sns.SubscriptionProtocol.EMAIL,
+      endpoint: alarmEmail,
+    });
+
+    const alarms = [
+      // A Lambda that throws or times out comes back as a 502: this one alarm covers every endpoint.
+      api.metricServerError({ period: cdk.Duration.minutes(5), statistic: 'Sum' }).createAlarm(this, 'ApiServerErrorsAlarm', {
+        alarmName: `kaamelott-api-5xx-${environment}`,
+        alarmDescription: 'API Gateway returned 5XX errors: check the Lambda logs in CloudWatch.',
+        threshold: 3,
+        evaluationPeriods: 1,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }),
+      // Approximate: counts every key, over a rolling day (the quota resets at midnight UTC).
+      api.metricCount({ period: cdk.Duration.days(1), statistic: 'Sum' }).createAlarm(this, 'ApiQuotaAlarm', {
+        alarmName: `kaamelott-api-quota-${environment}`,
+        alarmDescription: `Over 80% of the website's daily quota (${webDailyQuota} calls): abuse, or a bug looping on the API. At 100% the site stops working until midnight UTC.`,
+        threshold: webDailyQuota * 0.8,
+        evaluationPeriods: 1,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }),
+    ];
+    for (const alarm of alarms) {
+      alarm.addAlarmAction(new cloudwatchActions.SnsAction(alarmTopic));
+      alarm.addOkAction(new cloudwatchActions.SnsAction(alarmTopic));
+    }
 
     // Outputs
     new cdk.CfnOutput(this, 'ApiKeyId', {

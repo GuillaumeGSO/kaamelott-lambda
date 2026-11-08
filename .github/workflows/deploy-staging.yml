@@ -43,6 +43,8 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - run: npx cdk deploy kaamelott-staging --context env=staging --require-approval never
+        env:
+          ALARM_EMAIL: ${{ secrets.ALARM_EMAIL }} # a secret, not a variable: masked in the public logs
 
       - name: Load quotes
         if: inputs.load_quotes
