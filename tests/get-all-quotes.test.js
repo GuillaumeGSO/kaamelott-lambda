@@ -21,8 +21,6 @@ describe('get-all-quotes', () => {
     jest.clearAllMocks();
     process.env.TABLE_NAME = 'test-quotes-table';
 
-    // Fresh module per test: the quotes are cached at module level.
-    jest.resetModules();
     ({ lambdaHandler } = await import('../lambdas/get-all-quotes/index.mjs'));
   });
 
@@ -54,13 +52,15 @@ describe('get-all-quotes', () => {
     expect(mockSend).toHaveBeenCalledTimes(2);
   });
 
-  test('should scan only once across warm invocations', async () => {
-    mockSend.mockResolvedValueOnce({ Items: [{ quoteId: 'a' }] });
+  test('should serve reloaded quotes on a warm invocation, with no stale cache', async () => {
+    mockSend
+      .mockResolvedValueOnce({ Items: [{ quoteId: 'a' }] })
+      .mockResolvedValueOnce({ Items: [{ quoteId: 'a' }, { quoteId: 'b' }] });
 
     await lambdaHandler();
     const result = await lambdaHandler();
 
-    expect(JSON.parse(result.body).quotes).toHaveLength(1);
-    expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(result.body).quotes).toHaveLength(2);
+    expect(mockSend).toHaveBeenCalledTimes(2);
   });
 });

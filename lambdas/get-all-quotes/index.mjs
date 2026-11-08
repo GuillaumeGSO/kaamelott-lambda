@@ -25,17 +25,15 @@ const paginate = async (CommandClass, params) => {
   return items;
 };
 
-// Quotes change only when load-quotes runs: cached across warm invocations.
-let cachedQuotes = null;
-
+// Scans on every call, with no cache in the function: the website's CloudFront already caches
+// the response (a day per edge region), and a cache here kept serving the old quotes after a
+// reload until the next cold start.
 export const lambdaHandler = async () => {
-  if (!cachedQuotes) {
-    const items = await paginate(ScanCommand, { TableName: TABLE_NAME });
-    // Stable order, so identical data gives an identical response.
-    cachedQuotes = items.sort((a, b) => a.quoteId.localeCompare(b.quoteId));
-  }
+  const items = await paginate(ScanCommand, { TableName: TABLE_NAME });
+  // Stable order, so identical data gives an identical response.
+  const quotes = items.sort((a, b) => a.quoteId.localeCompare(b.quoteId));
 
   // Browsers keep the list for an hour; the website's CloudFront caches it longer, so most
   // visitors never reach this function.
-  return jsonResponse(200, { quotes: cachedQuotes }, 'public, max-age=3600');
+  return jsonResponse(200, { quotes }, 'public, max-age=3600');
 };

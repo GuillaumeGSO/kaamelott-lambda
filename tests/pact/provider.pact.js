@@ -66,7 +66,7 @@ const ROUTES = {
   'POST /favorites': 'post-favorite',
 };
 
-// Fresh modules for every state: some handlers cache what they read (get-all-quotes).
+// Fresh modules for every state, in case a handler caches what it reads.
 let handlers = {};
 const loadHandlers = async () => {
   jest.resetModules();
