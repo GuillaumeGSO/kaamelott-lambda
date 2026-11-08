@@ -12,11 +12,22 @@ const synth = (environment: 'staging' | 'prod') => {
   return Template.fromStack(stack);
 };
 
-describe('KaamelottStack alarms', () => {
-  // Synthesising bundles every Lambda asset: done once per environment.
-  const staging = synth('staging');
-  const prod = synth('prod');
+// Synthesising bundles every Lambda asset: done once per environment.
+const staging = synth('staging');
+const prod = synth('prod');
 
+describe('KaamelottStack Lambdas', () => {
+  test('run on arm64 (Graviton), the API ones and the loader alike', () => {
+    // CDK's own helper functions (S3 deployment, auto-delete) aren't ours: only check kaamelott-*.
+    const functions = Object.values(staging.findResources('AWS::Lambda::Function')).filter(f =>
+      String(f.Properties.FunctionName ?? '').startsWith('kaamelott-'),
+    );
+    expect(functions).toHaveLength(10);
+    for (const f of functions) expect(f.Properties.Architectures).toEqual(['arm64']);
+  });
+});
+
+describe('KaamelottStack alarms', () => {
   test('emails the alarm topic', () => {
     staging.hasResourceProperties('AWS::SNS::Topic', { TopicName: 'kaamelott-alarms-staging' });
     staging.hasResourceProperties('AWS::SNS::Subscription', {

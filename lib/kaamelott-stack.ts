@@ -77,7 +77,9 @@ export class KaamelottStack extends cdk.Stack {
 
     const lambdaDefaults: Omit<lambda.FunctionProps, 'code' | 'handler'> = {
       runtime: lambda.Runtime.NODEJS_24_X,
-      architecture: lambda.Architecture.X86_64,
+      // Graviton: about 20% cheaper per GB-second. Safe while the functions stay pure JS (no
+      // native modules, which would have to be built for arm64).
+      architecture: lambda.Architecture.ARM_64,
       environment: commonEnv,
     };
 
