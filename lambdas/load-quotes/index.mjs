@@ -1,12 +1,15 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, BatchWriteCommand } from '@aws-sdk/lib-dynamodb';
+import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
 
 const s3 = new S3Client({});
 const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const eventBridge = new EventBridgeClient({});
 
 const TABLE_NAME = process.env.TABLE_NAME;
 const BUCKET_NAME = process.env.BUCKET_NAME;
+const ENVIRONMENT = process.env.ENVIRONMENT;
 const BATCH_SIZE = 25; // DynamoDB BatchWrite limit
 const MAX_ATTEMPTS = 5; // per batch: the first write, then retries of what is left unprocessed
 const RETRY_BASE_MS = 100; // doubled at each retry: 100, 200, 400, 800 ms
@@ -68,6 +71,21 @@ export const lambdaHandler = async () => {
   // workflow, which only checks for a FunctionError.
   if (unprocessedCount) {
     throw new Error(`load-quotes left ${unprocessedCount} of ${quotes.length} quote(s) unwritten after ${MAX_ATTEMPTS} attempts per batch`);
+  }
+
+  // Tells whoever caches the quotes (the kaamelott-app website's CloudFront) to refresh them.
+  // This repo doesn't know who listens: the schema below is the contract, documented in the README.
+  const published = await eventBridge.send(new PutEventsCommand({
+    Entries: [{
+      Source: 'kaamelott.quotes',
+      DetailType: 'QuotesReloaded',
+      Detail: JSON.stringify({ environment: ENVIRONMENT, count: quotes.length }),
+    }],
+  }));
+  // PutEvents reports a rejected entry in a 200, like BatchWrite: thrown so the workflow fails
+  // (the quotes are written, but the site would keep its cached copy for up to a day).
+  if (published.FailedEntryCount) {
+    throw new Error(`Quotes loaded, but the QuotesReloaded event was rejected: ${published.Entries?.[0]?.ErrorMessage}`);
   }
 
   return jsonResponse(200, { loaded: quotes.length });

@@ -4,6 +4,8 @@ const mockDynamoSend = jest.fn();
 const mockS3Client = { send: mockS3Send };
 const mockDynamoClient = { send: mockDynamoSend };
 const mockBatchWriteCommand = jest.fn();
+const mockEventsSend = jest.fn();
+const mockPutEventsCommand = jest.fn();
 
 jest.doMock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => mockS3Client),
@@ -21,6 +23,11 @@ jest.doMock('@aws-sdk/lib-dynamodb', () => ({
   BatchWriteCommand: mockBatchWriteCommand
 }));
 
+jest.doMock('@aws-sdk/client-eventbridge', () => ({
+  EventBridgeClient: jest.fn(() => ({ send: mockEventsSend })),
+  PutEventsCommand: mockPutEventsCommand
+}));
+
 describe('load-quotes', () => {
   let lambdaHandler;
   
@@ -28,6 +35,8 @@ describe('load-quotes', () => {
     jest.clearAllMocks();
     process.env.TABLE_NAME = 'test-quotes-table';
     process.env.BUCKET_NAME = 'test-bucket';
+    process.env.ENVIRONMENT = 'staging';
+    mockEventsSend.mockResolvedValue({ FailedEntryCount: 0, Entries: [{ EventId: 'event-1' }] });
     
     delete require.cache[require.resolve('../lambdas/load-quotes/index.mjs')];
     
@@ -160,6 +169,48 @@ describe('load-quotes', () => {
     expect(mockDynamoSend).not.toHaveBeenCalled();
   });
 
+  describe('QuotesReloaded event (the contract with the website, see README)', () => {
+    const quotes = [
+      { quoteId: 'quote1', character: 'Arthur', text: 'Test quote 1' },
+      { quoteId: 'quote2', character: 'Lancelot', text: 'Test quote 2' }
+    ];
+
+    beforeEach(() => {
+      mockS3Send.mockResolvedValueOnce({
+        Body: {
+          async *[Symbol.asyncIterator]() {
+            yield Buffer.from(JSON.stringify(quotes));
+          }
+        }
+      });
+    });
+
+    test('should be published once every quote is written', async () => {
+      mockDynamoSend.mockResolvedValueOnce({});
+
+      await lambdaHandler();
+
+      expect(mockEventsSend).toHaveBeenCalledTimes(1);
+      const [entry] = mockPutEventsCommand.mock.calls[0][0].Entries;
+      expect(entry).toEqual({
+        Source: 'kaamelott.quotes',
+        DetailType: 'QuotesReloaded',
+        Detail: expect.any(String)
+      });
+      expect(JSON.parse(entry.Detail)).toEqual({ environment: 'staging', count: 2 });
+    });
+
+    test('should fail the function when EventBridge rejects it', async () => {
+      mockDynamoSend.mockResolvedValueOnce({});
+      mockEventsSend.mockResolvedValueOnce({
+        FailedEntryCount: 1,
+        Entries: [{ ErrorCode: 'InternalFailure', ErrorMessage: 'try again' }]
+      });
+
+      await expect(lambdaHandler()).rejects.toThrow('QuotesReloaded event was rejected: try again');
+    });
+  });
+
   describe('items left unprocessed by BatchWrite', () => {
     const quotes = [
       { quoteId: 'quote1', character: 'Arthur', text: 'Test quote 1' },
@@ -210,6 +261,8 @@ describe('load-quotes', () => {
       await assertion;
 
       expect(mockDynamoSend).toHaveBeenCalledTimes(5);
+      // An incomplete load mustn't tell the website to refresh.
+      expect(mockEventsSend).not.toHaveBeenCalled();
     });
   });
 });

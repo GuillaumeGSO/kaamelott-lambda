@@ -25,6 +25,15 @@ describe('KaamelottStack Lambdas', () => {
     expect(functions).toHaveLength(10);
     for (const f of functions) expect(f.Properties.Architectures).toEqual(['arm64']);
   });
+
+  test('let only the loader publish QuotesReloaded, on the default bus', () => {
+    const publishers = Object.values(staging.findResources('AWS::IAM::Policy')).filter(p =>
+      JSON.stringify(p.Properties.PolicyDocument).includes('events:PutEvents'),
+    );
+    expect(publishers).toHaveLength(1);
+    expect(JSON.stringify(publishers[0].Properties.Roles)).toMatch(/LoadQuotes/);
+    expect(JSON.stringify(publishers[0].Properties.PolicyDocument)).toMatch(/event-bus\/default/);
+  });
 });
 
 describe('KaamelottStack alarms', () => {
