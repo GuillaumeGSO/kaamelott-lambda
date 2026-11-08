@@ -59,7 +59,7 @@ Serverless REST API returning random quotes from the French comedy series [Kaame
 | `POST` | `/favorites` | Add or remove a quote from favorites |
 | `GET` | `/favorites/status` | Check if a quote is favorited by a user |
 
-`/quotes/all`, `/quotes/likes` and `GET /favorites` serve the [kaamelott-app](https://github.com/GuillaumeGSO/kaamelott-app) website. It loads every quote once and filters in the browser, and its CloudFront caches the first two (1 day and 5 minutes). A visit then costs about 2 API calls instead of one or two per quote shown. The website's key (`kaamelott-web-<env>`) has its own usage plan: 5,000 calls/day on staging, 10,000 on prod, 20 calls/s (burst 40).
+`/quotes/all`, `/quotes/likes` and `GET /favorites` serve the [kaamelott-app](https://github.com/GuillaumeGSO/kaamelott-app) website. It loads every quote once and filters in the browser, and its CloudFront caches the first two (1 day and 5 minutes). A visit then costs about 2 API calls instead of one or two per quote shown. The website's key (`kaamelott-web-<env>`) has its own usage plan: 1,000 calls/day on staging, 5,000 on prod, 20 calls/s (burst 40).
 
 ### Quote response format
 
@@ -151,7 +151,10 @@ PACT_URLS=../kaamelott-app/pacts/kaamelott-app-kaamelott-lambda.json npm run pac
 
 ## Deploy
 
+Every CDK command (`deploy`, `diff`, `destroy`, `synth`) needs `ALARM_EMAIL`, the address that receives the CloudWatch alarms. It isn't committed (public repo), and synth fails without it: a deploy without it would delete the alarm subscription.
+
 ```bash
+export ALARM_EMAIL=you@example.com
 npx cdk deploy --context env=staging --profile kaamelott
 npx cdk deploy --context env=prod --profile kaamelott
 ```
@@ -174,9 +177,18 @@ Re-run any time `data/quotes.json` changes. Repeat for prod (`kaamelott-load-quo
 
 ### Deploy staging from GitHub
 
-Actions → **Deploy staging** → **Run workflow** runs the tests and the Pact check, then `cdk deploy kaamelott-staging`. Tick **load_quotes** to also reload `data/quotes.json` into DynamoDB. Prod is deployed locally only.
+Actions → **Deploy staging** → **Run workflow** runs the tests and the Pact check, then `cdk deploy kaamelott-staging`. Tick **load_quotes** to also reload `data/quotes.json` into DynamoDB. Prod is deployed locally only. The workflow reads `ALARM_EMAIL` from a repository **secret** (Settings → Secrets and variables → Actions), not a variable, so it's masked in the public logs.
 
 The workflow authenticates with GitHub OIDC (no stored AWS keys). It assumes the `kaamelott-github-deploy-staging` IAM role, which trusts only this repo's `staging` GitHub environment and may only use the CDK bootstrap roles and invoke `kaamelott-load-quotes-staging`.
+
+### Alarms
+
+Each environment has an SNS topic `kaamelott-alarms-<env>` that emails `ALARM_EMAIL` (confirm the subscription from the first email AWS sends), on alarm and on recovery:
+
+- `kaamelott-api-5xx-<env>`: 3 or more 5XX responses in 5 minutes. A Lambda that throws or times out comes back as a 502, so this covers every endpoint.
+- `kaamelott-api-quota-<env>`: more than 80% of the website's daily quota (800 calls in staging, 4,000 in prod) over a rolling day. It counts every API key, and the quota resets at midnight UTC, so it's an early warning, not an exact gauge.
+
+Costs (budget, anomaly detection) are watched at the AWS Organization level, from the management account.
 
 ### Preview changes before deploy
 

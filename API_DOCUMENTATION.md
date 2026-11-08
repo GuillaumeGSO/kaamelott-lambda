@@ -314,7 +314,7 @@ All error responses follow this format:
 ## Rate Limits
 
 - **Daily Limit**: 1,000 requests per API key
-- **Website key** (`kaamelott-web-<env>`): 5,000 requests per day on staging, 10,000 on prod, 20 requests/s (burst 40)
+- **Website key** (`kaamelott-web-<env>`): 1,000 requests per day on staging, 5,000 on prod, 20 requests/s (burst 40)
 - **Concurrent Requests**: Standard AWS API Gateway limits apply
 
 ## Migration from Previous API
