@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       load_quotes:
-        description: Reload data/quotes.json into DynamoDB after deploy
+        description: Reload data/quotes.json into DynamoDB after deploy, then refresh the site's cached copy
         type: boolean
         default: false
 
@@ -54,3 +54,17 @@ jobs:
           cat /tmp/load-result.json
           # invoke exits 0 even when the function throws; the error is only reported here
           if echo "$out" | grep -q FunctionError; then exit 1; fi
+
+      # Without this the website keeps serving its CloudFront copy of /quotes/all for up to a day.
+      # The distribution is looked up from the kaamelott-app stack rather than written here.
+      - name: Refresh the site's cached quotes
+        if: inputs.load_quotes
+        run: |
+          id=$(aws cloudformation describe-stacks --stack-name kaamelott-app-staging \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text)
+          if [ -z "$id" ] || [ "$id" = None ]; then
+            echo "::error::No DistributionId output on the kaamelott-app-staging stack"
+            exit 1
+          fi
+          aws cloudfront create-invalidation --distribution-id "$id" --paths /quotes/all \
+            --query 'Invalidation.[Id,Status]' --output text
