@@ -624,6 +624,27 @@ export class KaamelottStack extends cdk.Stack {
         treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
       }),
     ];
+    // Lambda concurrency is one limit for the whole account (staging and prod together), so this
+    // alarm watches the account's total and exists once: in the staging stack, always deployed.
+    // Over the limit, Lambda refuses invocations and API Gateway answers 500 instead of the usage
+    // plan's 429. The website's bursts (40 per env) stay well below 100.
+    if (!isProd) {
+      alarms.push(
+        new cloudwatch.Metric({
+          namespace: 'AWS/Lambda',
+          metricName: 'ConcurrentExecutions',
+          statistic: 'Maximum',
+          period: cdk.Duration.minutes(1),
+        }).createAlarm(this, 'LambdaConcurrencyAlarm', {
+          alarmName: 'kaamelott-lambda-concurrency',
+          alarmDescription: 'Over 100 Lambda instances running at once, all functions of the account (staging and prod). Near the account limit, Lambda refuses invocations and the API answers 500. See which function in the Lambda console (Monitor, Concurrent executions).',
+          threshold: 100,
+          evaluationPeriods: 1,
+          comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+          treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+        }),
+      );
+    }
     for (const alarm of alarms) {
       alarm.addAlarmAction(new cloudwatchActions.SnsAction(alarmTopic));
       alarm.addOkAction(new cloudwatchActions.SnsAction(alarmTopic));

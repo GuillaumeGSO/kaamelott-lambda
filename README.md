@@ -207,6 +207,7 @@ Each environment has an SNS topic `kaamelott-alarms-<env>` that emails `ALARM_EM
 
 - `kaamelott-api-5xx-<env>`: 3 or more 5XX responses in 5 minutes. A Lambda that throws or times out comes back as a 502, so this covers every endpoint.
 - `kaamelott-api-quota-<env>`: more than 80% of the website's daily quota (800 calls in staging, 4,000 in prod) over a rolling day. It counts every API key, and the quota resets at midnight UTC, so it's an early warning, not an exact gauge.
+- `kaamelott-lambda-concurrency` (once per account, created by the staging stack): more than 100 Lambda instances running at once, all functions together. Lambda concurrency is one limit for the whole account, staging and prod included (1,000, the lowest value AWS grants above the new-account limit of 10). Keep it well above the website's bursts (40 per environment, and the throttle is best effort): over the limit, Lambda refuses invocations and the API answers 500 instead of the usage plan's 429.
 
 Costs (budget, anomaly detection) are watched at the AWS Organization level, from the management account.
 
