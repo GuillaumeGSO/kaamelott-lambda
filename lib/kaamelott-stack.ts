@@ -220,7 +220,26 @@ export class KaamelottStack extends cdk.Stack {
         stageName: environment,
         loggingLevel: apigateway.MethodLoggingLevel.INFO,
         accessLogDestination: new apigateway.LogGroupLogDestination(apiLogGroup),
-        accessLogFormat: apigateway.AccessLogFormat.jsonWithStandardFields(),
+        // The standard fields, plus why a request failed. lambdaStatus is what the Lambda service
+        // answered (429 when it refuses to start the function, which the caller sees as a 500);
+        // functionStatus is what the function's code returned. Both are "-" when API Gateway stopped
+        // the request before Lambda: errorType then says why (THROTTLED, QUOTA_EXCEEDED...).
+        accessLogFormat: apigateway.AccessLogFormat.custom(JSON.stringify({
+          requestId: apigateway.AccessLogField.contextRequestId(),
+          ip: apigateway.AccessLogField.contextIdentitySourceIp(),
+          requestTime: apigateway.AccessLogField.contextRequestTime(),
+          httpMethod: apigateway.AccessLogField.contextHttpMethod(),
+          resourcePath: apigateway.AccessLogField.contextResourcePath(),
+          status: apigateway.AccessLogField.contextStatus(),
+          protocol: apigateway.AccessLogField.contextProtocol(),
+          responseLength: apigateway.AccessLogField.contextResponseLength(),
+          lambdaStatus: apigateway.AccessLogField.contextIntegrationStatus(),
+          functionStatus: '$context.integration.status', // no AccessLogField helper for this one
+          integrationLatency: apigateway.AccessLogField.contextIntegrationLatency(),
+          errorType: apigateway.AccessLogField.contextErrorResponseType(),
+          errorMessage: apigateway.AccessLogField.contextErrorMessage(),
+          apiKeyId: apigateway.AccessLogField.contextIdentityApiKeyId(),
+        })),
       },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
