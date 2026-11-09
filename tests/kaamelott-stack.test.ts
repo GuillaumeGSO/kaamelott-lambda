@@ -82,3 +82,18 @@ describe('KaamelottStack alarms', () => {
     }
   });
 });
+
+describe('KaamelottStack API logs', () => {
+  test('log why a request failed, and with which key', () => {
+    const [stage] = Object.values(staging.findResources('AWS::ApiGateway::Stage'));
+    const format = JSON.parse(stage.Properties.AccessLogSetting.Format);
+    expect(format).toMatchObject({
+      status: '$context.status',
+      lambdaStatus: '$context.integrationStatus',
+      functionStatus: '$context.integration.status',
+      errorType: '$context.error.responseType',
+      errorMessage: '$context.error.message',
+      apiKeyId: '$context.identity.apiKeyId',
+    });
+  });
+});
