@@ -210,6 +210,20 @@ Each environment has an SNS topic `kaamelott-alarms-<env>` that emails `ALARM_EM
 
 Costs (budget, anomaly detection) are watched at the AWS Organization level, from the management account.
 
+### API logs
+
+Access logs go to `/aws/apigateway/kaamelott-<env>` (one JSON line per request, kept a week). Besides the standard fields, each line says why a request failed and which key made it:
+
+| Field | Meaning |
+|---|---|
+| `lambdaStatus` | What the Lambda service answered: `200` normally, `429` when it refused to start the function (concurrency limit). The caller then gets a `500` |
+| `functionStatus` | What the function's code returned |
+| `errorType`, `errorMessage` | Why API Gateway answered with an error, e.g. `THROTTLED` (usage plan rate), `QUOTA_EXCEEDED`, `INVALID_API_KEY` |
+| `integrationLatency` | Time spent in Lambda, in ms |
+| `apiKeyId` | Which API key made the call (website or the original one) |
+
+`lambdaStatus` and `functionStatus` are `-` when API Gateway stopped the request before Lambda. In CloudWatch, search the log group with `{ $.lambdaStatus = "429" }` to find refused invocations. The execution logs (`API-Gateway-Execution-Logs_<api id>/<env>`) have the full detail of each request.
+
 ### Preview changes before deploy
 
 ```bash
