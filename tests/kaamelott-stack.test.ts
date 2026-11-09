@@ -97,3 +97,18 @@ describe('KaamelottStack API logs', () => {
     });
   });
 });
+
+describe('KaamelottStack Lambda concurrency alarm', () => {
+  test("watches the account's total, from the staging stack only", () => {
+    staging.hasResourceProperties('AWS::CloudWatch::Alarm', {
+      AlarmName: 'kaamelott-lambda-concurrency',
+      Namespace: 'AWS/Lambda',
+      MetricName: 'ConcurrentExecutions',
+      Dimensions: Match.absent(),
+      Statistic: 'Maximum',
+      Threshold: 100,
+      AlarmActions: [{ Ref: Match.stringLikeRegexp('AlarmTopic') }],
+    });
+    prod.resourcePropertiesCountIs('AWS::CloudWatch::Alarm', { AlarmName: 'kaamelott-lambda-concurrency' }, 0);
+  });
+});
